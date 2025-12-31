@@ -2486,7 +2486,7 @@ export const ngoController = {
     }
   },
 
-  // Update NGO profile
+  // Update () NGO profile
   updateProfile: async (req: Request, res: Response): Promise<void> => {
     try {
       const ngoId = req.user?.id;
