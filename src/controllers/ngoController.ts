@@ -13,6 +13,7 @@ import Stripe from "stripe";
 import axios from "axios";
 import OrganizationType from "../models/OrganizationType";
 import CauseType from "../models/CauseType";
+import { User } from "../models/User";
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || "", {
   apiVersion: "2025-03-31.basil" as any,
@@ -2380,6 +2381,72 @@ export const ngoController = {
       res.status(500).json({ message: "Error logging in", error });
     }
   },
+
+  // login: async (req: Request, res: Response): Promise<void> => {
+  //   try {
+  //   const { email, password } = req.body;
+
+  //   if (!email || !password) {
+  //     res.status(400).json({ message: "Email and password are required" });
+  //     return;
+  //   }
+
+  //   // First, check NGO table
+  //   let account: any = await Ngo.findOne({ email });
+  //   let role = "ngo";
+
+  //   // If not found in NGO, check User table
+  //   if (!account) {
+  //     account = await User.findOne({ email });
+  //     role = "ngo";
+  //   }
+
+  //   if (!account) {
+  //     res.status(401).json({ message: "Invalid credentials" });
+  //     return;
+  //   }
+
+  //   // Compare password with hashed password
+  //   const isMatch = await bcrypt.compare(password, account.password);
+  //   if (!isMatch) {
+  //     res.status(401).json({ message: "Invalid credentials" });
+  //     return;
+  //   }
+
+  //   // Generate JWT token
+  //   const token = jwt.sign(
+  //     { userId: account._id, role },
+  //     JWT_SECRET,
+  //     { expiresIn: "24h" }
+  //   );
+
+  //   // Prepare response
+  //   const responseData =
+  //     role === "ngo"
+  //       ? {
+  //           id: account._id,
+  //           name: account.name,
+  //           email: account.email,
+  //           status: account.status,
+  //           profileComplete: account.profileComplete,
+  //         }
+  //       : {
+  //           id: account._id,
+  //           firstName: account.firstName,
+  //           lastName: account.lastName,
+  //           email: account.email,
+  //         };
+
+  //   res.json({
+  //     token,
+  //     role,
+  //     account: responseData,
+  //   });
+  // } catch (error: any) {
+  //   console.error("Login error:", error);
+  //   res.status(500).json({ message: "Error logging in", error: error.message });
+  // }
+  // },
 
   // Get NGO profile with complete details and all campaigns
   getProfile: async (req: Request, res: Response): Promise<void> => {

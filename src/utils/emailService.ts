@@ -337,7 +337,42 @@ class EmailService {
     };
     await this.sendEmail(options);
   }
+
+  // 6. invite user
+  // Add this inside EmailService class
+  async sendWelcomeEmailUser(
+  userEmail: string,
+  userName: string,
+  password: string
+): Promise<void> {
+  const content = `
+    <div class="header">
+      <h1>You're Invited to GiveToAfrica!</h1>
+    </div>
+    <div class="content">
+      <h2>Hello ${userName},</h2>
+      <p>You have been invited to join GiveToAfrica by your organization.</p>
+      <p>Your login credentials are:</p>
+      <div class="donation-details">
+        <p>Email: ${userEmail}</p>
+        <p>Password: ${password}</p>
+      </div>
+      <p>Please login and change your password after your first login.</p>
+      <a href="${process.env.FRONTEND_URL}/login" class="button">Login Now</a>
+    </div>
+  `;
+
+  const options: EmailOptions = {
+    to: userEmail,
+    subject: "Invitation to Join GiveToAfrica",
+    html: wrapEmailContent(content),
+  };
+
+  await this.sendEmail(options);
 }
+
+}
+
 
 // Export a singleton instance
 export const emailService = new EmailService();

@@ -6,95 +6,235 @@ import { emailService } from "../utils/emailService";
 
 export const campaignController = {
   // Create a new campaign
+  // createCampaign: async (req: Request, res: Response): Promise<void> => {
+  //   try {
+  //     const ngoId = req.user?.id;
+
+  //     // Check if NGO has completed profile
+  //     const ngo = await Ngo.findById(ngoId);
+  //     if (!ngo) {
+  //       res.status(403).json({
+  //         message: "Complete your NGO profile before creating campaigns",
+  //       });
+  //       return;
+  //     }
+
+  //     const {
+  //       title,
+  //       description,
+  //       fundingGoal,
+  //       cause,
+  //       country,
+  //       deadline,
+  //       campaignSlug,
+  //       status,
+  //     } = req.body;
+
+  //     // let faqs: { question: string; answer: string }[] = [];
+
+  //     // try {
+  //     //   if (req.body.faqs) {
+  //     //     faqs = typeof req.body.faqs === "string"
+  //     //       ? JSON.parse(req.body.faqs)
+  //     //       : req.body.faqs;
+  //     //   }
+  //     // } catch (err) {
+  //     //   console.error("FAQ parse error:", err);
+  //     //   faqs = [];
+  //     // }
+
+  //     // Basic validation
+  //     if (!title || !description || !fundingGoal || !cause || !country) {
+  //       res.status(400).json({ message: "Missing required campaign fields" });
+  //       return;
+  //     }
+
+  //     // Media validation
+  //     if (!req.files || !("mainImage" in req.files)) {
+  //       res.status(400).json({ message: "Main image is required" });
+  //       return;
+  //     }
+
+  //     // Handle file uploads
+  //     const files = req.files as { [fieldname: string]: Express.Multer.File[] };
+
+  //     const media = {
+  //       mainImage: files.mainImage?.[0]?.path || "",
+  //       additionalImages:
+  //         files.additionalImages?.map((file) => file.path) || [],
+  //     };
+
+  //     // if (!faqs || !Array.isArray(faqs) || faqs.length === 0) {
+  //     //   res.status(400).json({ message: "Please provide at least one FAQ" });
+  //     //   return;
+  //     // }
+
+  //     // let formattedFaqs: { question: string; answer: string }[] = [];
+  //     // if (faqs && Array.isArray(faqs)) {
+  //     //   formattedFaqs = faqs.filter(
+  //     //     (f: any) => f.question?.trim() && f.answer?.trim()
+  //     //   );
+  //     // }
+
+  //     // Create campaign with the NGO's ID
+  //     const campaign = new Campaign({
+  //       title,
+  //       description,
+  //       ngoId,
+  //       fundingGoal,
+  //       cause,
+  //       country,
+  //       media,
+  //       // faqs: formattedFaqs,
+  //       deadline: deadline ? Number(deadline) : null,
+  //       status,
+  //       // Generate a slug based on title if not provided
+  //       campaignSlug:
+  //         campaignSlug ||
+  //         title
+  //           .toLowerCase()
+  //           .replace(/[^a-z0-9]+/g, "-")
+  //           .replace(/(^-|-$)/g, ""),
+  //     });
+
+  //     await campaign.save();
+
+  //     res.status(201).json({
+  //       message: "Campaign created successfully",
+  //       campaign: {
+  //         id: campaign._id,
+  //         title: campaign.title,
+  //         status: campaign.status,
+  //         campaignSlug: campaign.campaignSlug,
+  //         // faqs: campaign?.faqs,
+  //       },
+  //     });
+  //   } catch (error) {
+  //     res.status(500).json({ message: "Error creating campaign", error });
+  //   }
+  // },
+
   createCampaign: async (req: Request, res: Response): Promise<void> => {
     try {
-      const ngoId = req.user?.id;
+      const ngoId = (req as any).user?.id;
 
-      // Check if NGO has completed profile
       const ngo = await Ngo.findById(ngoId);
       if (!ngo) {
-        res.status(403).json({
-          message: "Complete your NGO profile before creating campaigns",
-        });
+        res
+          .status(403)
+          .json({ message: "Complete your NGO profile before creating campaigns" });
         return;
+      }
+
+      // Frontend -> FormData: "data" (JSON string)
+      let body: any = {};
+      if (req.body.data) {
+        try {
+          body = JSON.parse(req.body.data);
+        } catch (err) {
+          res.status(400).json({ message: "Invalid data JSON in request" });
+          return;
+        }
+      } else {
+        body = req.body;
       }
 
       const {
         title,
         description,
-        fundingGoal,
-        cause,
+        goalAmount,
+        causeType,
         country,
         deadline,
         campaignSlug,
         status,
-      } = req.body;
 
-      // let faqs: { question: string; answer: string }[] = [];
+        fundraiserOptions,
+        color,
+        commonDonation,
+        suggestedAmounts,
+        taxReceipt,
+        customQuestions,
+        thankYouEmail,
+        fundraiserEmail,
+        advanced,
+      } = body;
 
-      // try {
-      //   if (req.body.faqs) {
-      //     faqs = typeof req.body.faqs === "string"
-      //       ? JSON.parse(req.body.faqs)
-      //       : req.body.faqs;
-      //   }
-      // } catch (err) {
-      //   console.error("FAQ parse error:", err);
-      //   faqs = [];
-      // }
+      const fundingGoal = goalAmount ? Number(goalAmount) : undefined;
+
+      // cause ko filhaal causeType se hi set kar rahe hain
+      const campaignType = causeType || undefined;
+      const cause = causeType || "Other";
+
+      const finalCountry = country || ngo.country || "Pakistan";
+
+      const VALID_STATUS = ["draft", "ongoing", "paused", "completed"];
+      const finalStatus = VALID_STATUS.includes(status)
+        ? status
+        : "draft"; // "active" allowed nahi hai schema me
 
       // Basic validation
-      if (!title || !description || !fundingGoal || !cause || !country) {
-        res.status(400).json({ message: "Missing required campaign fields" });
+      if (!title || !description || !fundingGoal || !cause || !finalCountry) {
+        res.status(400).json({
+          message:
+            "Missing required campaign fields (title, description, funding goal, cause, country)",
+        });
         return;
       }
 
-      // Media validation
-      if (!req.files || !("mainImage" in req.files)) {
-        res.status(400).json({ message: "Main image is required" });
+      // Files: banner -> mainImage, logo -> additionalImages[0]
+      const files = req.files as
+        | { [fieldname: string]: Express.Multer.File[] }
+        | undefined;
+
+      const mainImageFile =
+        files?.banner?.[0] || // new frontend naam
+        files?.mainImage?.[0]; // agar purana naam ho
+
+      if (!mainImageFile) {
+        res.status(400).json({ message: "Main image (banner) is required" });
         return;
       }
 
-      // Handle file uploads
-      const files = req.files as { [fieldname: string]: Express.Multer.File[] };
+      const additionalImages: string[] = [];
+
+      if (files?.logo?.[0]) {
+        additionalImages.push(files.logo[0].path);
+      }
+      if (files?.additionalImages?.length) {
+        additionalImages.push(
+          ...files.additionalImages.map((file) => file.path)
+        );
+      }
 
       const media = {
-        mainImage: files.mainImage?.[0]?.path || "",
-        additionalImages:
-          files.additionalImages?.map((file) => file.path) || [],
+        mainImage: mainImageFile.path,
+        additionalImages,
       };
 
-      // if (!faqs || !Array.isArray(faqs) || faqs.length === 0) {
-      //   res.status(400).json({ message: "Please provide at least one FAQ" });
-      //   return;
-      // }
-
-      // let formattedFaqs: { question: string; answer: string }[] = [];
-      // if (faqs && Array.isArray(faqs)) {
-      //   formattedFaqs = faqs.filter(
-      //     (f: any) => f.question?.trim() && f.answer?.trim()
-      //   );
-      // }
-
-      // Create campaign with the NGO's ID
       const campaign = new Campaign({
         title,
         description,
         ngoId,
         fundingGoal,
         cause,
-        country,
+        campaignType,
+        country: finalCountry,
         media,
-        // faqs: formattedFaqs,
-        deadline: deadline ? Number(deadline) : null,
-        status,
-        // Generate a slug based on title if not provided
-        campaignSlug:
-          campaignSlug ||
-          title
-            .toLowerCase()
-            .replace(/[^a-z0-9]+/g, "-")
-            .replace(/(^-|-$)/g, ""),
+        deadline: deadline ? Number(deadline) : undefined,
+        status: finalStatus,
+
+        color,
+        fundraiserOptions,
+        commonDonation,
+        suggestedAmounts,
+        taxReceipt,
+        customQuestions,
+        thankYouEmail,
+        fundraiserEmail,
+        advanced,
+
+        campaignSlug, // optional, pre-save hook bhi handle karega
       });
 
       await campaign.save();
@@ -106,117 +246,166 @@ export const campaignController = {
           title: campaign.title,
           status: campaign.status,
           campaignSlug: campaign.campaignSlug,
-          // faqs: campaign?.faqs,
         },
       });
     } catch (error) {
+      console.error("Error creating campaign:", error);
       res.status(500).json({ message: "Error creating campaign", error });
     }
   },
 
   // Update campaign
   updateCampaign: async (req: Request, res: Response): Promise<void> => {
-    try {
-      const ngoId = req.user?.id;
-      const { campaignId } = req.params;
+  try {
+    const ngoId = (req as any).user?.id;
+    const { campaignId } = req.params;
 
-      // Verify campaign exists and belongs to this NGO
-      const campaign = await Campaign.findOne({
-        _id: campaignId,
-        ngoId,
-      });
+    // Verify campaign exists and belongs to this NGO
+    const existingCampaign = await Campaign.findOne({
+      _id: campaignId,
+      ngoId,
+    });
 
-      if (!campaign) {
-        res
-          .status(404)
-          .json({ message: "Campaign not found or not authorized" });
+    if (!existingCampaign) {
+      res
+        .status(404)
+        .json({ message: "Campaign not found or not authorized" });
+      return;
+    }
+
+    // Frontend -> FormData: "data" (JSON string) same as createCampaign
+    let body: any = {};
+    if (req.body.data) {
+      try {
+        body = JSON.parse(req.body.data);
+      } catch (err) {
+        res.status(400).json({ message: "Invalid data JSON in request" });
         return;
       }
-
-      const {
-        title,
-        description,
-        fundingGoal,
-        cause,
-        country,
-        status,
-        deadline,
-      } = req.body;
-
-      // let faqs: { question: string; answer: string }[] = [];
-      // try {
-      //   if (req.body.faqs) {
-      //     faqs =
-      //       typeof req.body.faqs === "string"
-      //         ? JSON.parse(req.body.faqs)
-      //         : req.body.faqs;
-      //   }
-      // } catch (err) {
-      //   console.error("FAQ parse error:", err);
-      //   faqs = [];
-      // }
-
-      // Update fields if provided
-      const updateData: Partial<ICampaign> = {};
-      if (title) updateData.title = title;
-      if (description) updateData.description = description;
-      if (fundingGoal) updateData.fundingGoal = fundingGoal;
-      if (cause) updateData.cause = cause;
-      if (country) updateData.country = country;
-      if (status) updateData.status = status;
-      if (deadline) {
-        updateData.deadline = Number(deadline);
-      }
-
-      // if (faqs && Array.isArray(faqs)) {
-      //   const formattedFaqs = faqs.filter(
-      //     (f: any) => f.question?.trim() && f.answer?.trim()
-      //   );
-
-      //   // Only set faqs if valid entries exist
-      //   if (formattedFaqs.length > 0) {
-      //     updateData.faqs = formattedFaqs;
-      //   }
-      // }
-
-      // Handle file uploads if any
-      if (req.files) {
-        const files = req.files as {
-          [fieldname: string]: Express.Multer.File[];
-        };
-
-        if (!updateData.media) updateData.media = { ...campaign.media };
-
-        if (files.mainImage?.[0]) {
-          updateData.media.mainImage = files.mainImage[0].path;
-        }
-
-        if (files.additionalImages?.length) {
-          updateData.media.additionalImages = files.additionalImages.map(
-            (file) => file.path
-          );
-        }
-      }
-
-      // Update the campaign
-      const updatedCampaign = await Campaign.findByIdAndUpdate(
-        campaignId,
-        updateData,
-        { new: true }
-      );
-
-      res.json({
-        message: "Campaign updated successfully",
-        campaign: {
-          id: updatedCampaign!._id,
-          title: updatedCampaign!.title,
-          status: updatedCampaign!.status,
-          // faqs: updatedCampaign!.faqs,
-        },
-      });
-    } catch (error) {
-      res.status(500).json({ message: "Error updating campaign", error });
+    } else {
+      body = req.body;
     }
+
+    const {
+      title,
+      description,
+      goalAmount,
+      causeType,
+      country,
+      status,
+      deadline,
+
+      fundraiserOptions,
+      color,
+      commonDonation,
+      suggestedAmounts,
+      taxReceipt,
+      customQuestions,
+      thankYouEmail,
+      fundraiserEmail,
+      advanced,
+    } = body;
+
+    const updateData: Partial<ICampaign> = {};
+
+    // Basic fields (partial update)
+    if (title !== undefined) updateData.title = title;
+    if (description !== undefined) updateData.description = description;
+    if (goalAmount !== undefined) {
+      updateData.fundingGoal = Number(goalAmount);
+    }
+
+    if (causeType !== undefined) {
+      // Same mapping as createCampaign
+      updateData.cause = causeType || "Other";
+      updateData.campaignType = causeType || undefined;
+    }
+
+    if (country !== undefined) updateData.country = country;
+
+    if (status !== undefined) {
+      const VALID_STATUS = ["draft", "ongoing", "paused", "completed"];
+      if (VALID_STATUS.includes(status)) {
+        updateData.status = status as any;
+      }
+    }
+
+    if (deadline !== undefined) {
+      updateData.deadline = Number(deadline);
+    }
+
+    // Extra frontend fields
+    if (fundraiserOptions !== undefined)
+      updateData.fundraiserOptions = fundraiserOptions;
+    if (color !== undefined) updateData.color = color;
+    if (commonDonation !== undefined)
+      updateData.commonDonation = commonDonation;
+    if (suggestedAmounts !== undefined)
+      updateData.suggestedAmounts = suggestedAmounts;
+    if (taxReceipt !== undefined) updateData.taxReceipt = taxReceipt;
+    if (customQuestions !== undefined)
+      updateData.customQuestions = customQuestions;
+    if (thankYouEmail !== undefined)
+      updateData.thankYouEmail = thankYouEmail;
+    if (fundraiserEmail !== undefined)
+      updateData.fundraiserEmail = fundraiserEmail;
+    if (advanced !== undefined) updateData.advanced = advanced;
+
+    // Handle file uploads (banner / logo) – same convention as createCampaign
+    const files = req.files as
+      | { [fieldname: string]: Express.Multer.File[] }
+      | undefined;
+
+    if (files) {
+      // Start from existing media
+      updateData.media = {
+        mainImage: existingCampaign.media.mainImage,
+        additionalImages: existingCampaign.media.additionalImages || [],
+      };
+
+      // Banner (or legacy mainImage)
+      const bannerFile = files.banner?.[0] || files.mainImage?.[0];
+      if (bannerFile) {
+        updateData.media.mainImage = bannerFile.path;
+      }
+
+      // Additional images (logo + legacy additionalImages)
+      const additionalImages: string[] = [
+        ...(updateData.media.additionalImages || []),
+      ];
+
+      if (files.logo?.[0]) {
+        additionalImages.push(files.logo[0].path);
+      }
+
+      if (files.additionalImages?.length) {
+        additionalImages.push(
+          ...files.additionalImages.map((file) => file.path)
+        );
+      }
+
+      updateData.media.additionalImages = additionalImages;
+    }
+
+    const updatedCampaign = await Campaign.findByIdAndUpdate(
+      campaignId,
+      updateData,
+      { new: true }
+    );
+
+    res.json({
+      message: "Campaign updated successfully",
+      campaign: {
+        id: updatedCampaign!._id,
+        title: updatedCampaign!.title,
+        status: updatedCampaign!.status,
+        campaignSlug: updatedCampaign!.campaignSlug,
+      },
+    });
+  } catch (error) {
+    console.error("Error updating campaign:", error);
+    res.status(500).json({ message: "Error updating campaign", error });
+  }
   },
 
   // Get campaign by ID or slug

@@ -20,8 +20,10 @@ router.post(
   "/",
   auth,
   upload.fields([
-    { name: "mainImage", maxCount: 1 },
-    { name: "additionalImages", maxCount: 2 },
+    // { name: "mainImage", maxCount: 1 },
+    // { name: "additionalImages", maxCount: 2 },
+    { name: "banner", maxCount: 1 },
+    { name: "logo", maxCount: 1 },
   ]),
   processUploadedFiles,
   campaignController.createCampaign
@@ -31,8 +33,10 @@ router.put(
   "/:campaignId",
   auth,
   upload.fields([
-    { name: "mainImage", maxCount: 1 },
-    { name: "additionalImages", maxCount: 2 },
+    // { name: "mainImage", maxCount: 1 },
+    // { name: "additionalImages", maxCount: 2 },
+    { name: "banner", maxCount: 1 },
+    { name: "logo", maxCount: 1 },
   ]),
   processUploadedFiles,
   campaignController.updateCampaign

@@ -2,35 +2,22 @@ import bcrypt from "bcryptjs";
 import mongoose, { Document, Schema } from "mongoose";
 
 export interface IUser extends Document {
+  firstName: string;
+  lastName: string;
   email: string;
   password: string;
-  name: string;
-  comparePassword(candidatePassword: string): Promise<boolean>;
+  permissions: Record<string, boolean>;
+  invitedBy: mongoose.Types.ObjectId;
 }
 
-const userSchema = new Schema(
-  {
-    email: {
-      type: String,
-      required: true,
-      unique: true,
-      trim: true,
-      lowercase: true,
-    },
-    password: {
-      type: String,
-      required: true,
-    },
-    name: {
-      type: String,
-      required: true,
-      trim: true,
-    },
-  },
-  {
-    timestamps: true,
-  }
-);
+const userSchema = new Schema<IUser>({
+  firstName: { type: String, required: true },
+  lastName: { type: String, required: true },
+  email: { type: String, required: true, unique: true },
+  password: { type: String, required: true },
+  permissions: { type: Object, default: {} },
+  invitedBy: { type: Schema.Types.ObjectId, ref: "Ngo" },
+});
 
 // Hash password before saving
 userSchema.pre("save", async function (next) {
