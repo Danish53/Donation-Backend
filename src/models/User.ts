@@ -8,6 +8,10 @@ export interface IUser extends Document {
   password: string;
   permissions: Record<string, boolean>;
   invitedBy: mongoose.Types.ObjectId;
+  role: string;
+  ngoId: mongoose.Types.ObjectId;
+  isActive: Boolean;
+  comparePassword(candidatePassword: string): Promise<boolean>;
 }
 
 const userSchema = new Schema<IUser>({
@@ -15,8 +19,27 @@ const userSchema = new Schema<IUser>({
   lastName: { type: String, required: true },
   email: { type: String, required: true, unique: true },
   password: { type: String, required: true },
+
+  role: {
+    type: String,
+    enum: ["member"],
+    default: "member",
+  },
+
   permissions: { type: Object, default: {} },
-  invitedBy: { type: Schema.Types.ObjectId, ref: "Ngo" },
+
+  ngoId: {
+    type: Schema.Types.ObjectId,
+    ref: "Ngo",
+    required: true,
+  },
+
+  invitedBy: {
+    type: Schema.Types.ObjectId,
+    ref: "Ngo",
+  },
+
+  isActive: { type: Boolean, default: true },
 });
 
 // Hash password before saving

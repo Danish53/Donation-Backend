@@ -168,10 +168,10 @@ export const campaignController = {
 
       const finalCountry = country || ngo.country || "Pakistan";
 
-      const VALID_STATUS = ["draft", "ongoing", "paused", "completed"];
+      const VALID_STATUS = ["ongoing", "draft", "paused", "completed"];
       const finalStatus = VALID_STATUS.includes(status)
         ? status
-        : "draft"; // "active" allowed nahi hai schema me
+        : "ongoing"; // "active" allowed nahi hai schema me
 
       // Basic validation
       if (!title || !description || !fundingGoal || !cause || !finalCountry) {
@@ -215,7 +215,7 @@ export const campaignController = {
       const campaign = new Campaign({
         title,
         description,
-        ngoId,
+        ngoId: ngo?._id,
         fundingGoal,
         cause,
         campaignType,
@@ -479,14 +479,13 @@ export const campaignController = {
       if (cause) query.cause = cause;
       if (country) query.country = country;
 
-      const campaigns = await Campaign.find(query).populate(
-        "ngoId",
-        "name orgName"
-      );
+      const campaigns = await Campaign.find(query)
+      .populate("ngoId", "name profileImage")
+      .lean();
 
       // Add total donors count to each campaign
       const campaignsWithDonors = campaigns.map((campaign) => {
-        const { donations, ...campaignObj } = campaign.toObject();
+        const { donations, ...campaignObj } = campaign;
         campaignObj.donors = donations.length;
         return campaignObj;
       });

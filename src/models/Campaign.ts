@@ -281,6 +281,12 @@
 
 import mongoose, { Document, Schema } from "mongoose";
 
+export interface ISuggestedAmountItem {
+  type: 'oneTime' | 'monthly' | 'yearly';
+  amount: number;
+  description?: string;
+}
+
 export interface IDonation {
   donorId?: string;
   donorName: string;
@@ -369,7 +375,7 @@ export interface ICampaign extends Document {
   color?: string;
   fundraiserOptions?: IFundraiserOptions;
   commonDonation?: string;
-  suggestedAmounts?: number[];
+  suggestedAmounts?: ISuggestedAmountItem[];
   taxReceipt?: boolean;
   customQuestions?: ICustomQuestion[];
   thankYouEmail?: IThankYouEmail;
@@ -535,7 +541,22 @@ const campaignSchema = new Schema<ICampaign>(
     },
 
     commonDonation: { type: String },
-    suggestedAmounts: { type: [Number], default: [] },
+    suggestedAmounts: [{
+      type: {
+        type: String,
+        enum: ['oneTime', 'monthly', 'yearly'],
+        required: true
+      },
+      amount: {
+        type: Number,
+        required: true,
+        min: 0 // Amounts should be non-negative
+      },
+      description: {
+        type: String,
+        trim: true
+      }
+    }],
     taxReceipt: { type: Boolean, default: true },
 
     customQuestions: [

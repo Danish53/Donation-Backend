@@ -6,7 +6,12 @@ const JWT_SECRET = process.env.JWT_SECRET || "your-secret-key";
 declare global {
   namespace Express {
     interface Request {
-      user?: { id: string };
+      user?: {
+        id: string;
+        role: "ngo" | "member";
+        ngoId: string;
+        permissions?: Record<string, boolean>;
+      };
     }
   }
 }
@@ -19,8 +24,14 @@ export const auth = async (req: Request, res: Response, next: NextFunction) => {
       throw new Error();
     }
 
-    const decoded = jwt.verify(token, JWT_SECRET) as { userId: string };
-    req.user = { id: decoded.userId };
+    const decoded = jwt.verify(token, JWT_SECRET) as {
+      id: string;
+      role: "ngo" | "member";
+      ngoId: string;
+      permissions?: Record<string, boolean>;
+    };
+
+    req.user = decoded;
     next();
   } catch (error) {
     res.status(401).json({ message: "Please authenticate" });

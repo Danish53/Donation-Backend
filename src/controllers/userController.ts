@@ -109,7 +109,6 @@ export const userController = {
     } 
 
     const isPasswordValid = await bcrypt.compare(ngoPassword.trim(), ngo.password);
-    console.log(isPasswordValid)
 
     if (!isPasswordValid){
        res.status(401).json({ message: "NGO password incorrect" });
@@ -137,8 +136,9 @@ export const userController = {
       lastName,
       email,
       password: generatedPassword,
-      permissions, // { editForm: true, managePayments: true, ... }
+      permissions,
       invitedBy: ngo._id,
+      ngoId: ngo._id,
     });
 
     await newUser.save();

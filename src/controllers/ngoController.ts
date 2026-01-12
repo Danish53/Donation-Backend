@@ -2346,29 +2346,68 @@ export const ngoController = {
   },
 
   // Login
+  // login: async (req: Request, res: Response): Promise<void> => {
+  //   try {
+  //     const { email, password } = req.body;
+
+  //     const ngo = await Ngo.findOne({ email });
+  //     if (!ngo) {
+  //       res.status(401).json({ message: "Invalid credentials" });
+  //       return;
+  //     }
+
+  //     // Compare plain text password with stored hash
+  //     const isMatch = await bcrypt.compare(password, ngo.password);
+  //     if (!isMatch) {
+  //       res.status(401).json({ message: "Invalid credentials" });
+  //       return;
+  //     }
+
+  //     const token = jwt.sign({ userId: ngo._id }, JWT_SECRET, {
+  //       expiresIn: "24h",
+  //     });
+
+  //     res.json({
+  //       token,
+  //       ngo: {
+  //         id: ngo._id,
+  //         name: ngo.name,
+  //         email: ngo.email,
+  //         status: ngo.status,
+  //         profileComplete: ngo.profileComplete,
+  //       },
+  //     });
+  //   } catch (error) {
+  //     res.status(500).json({ message: "Error logging in", error });
+  //   }
+  // },
+
   login: async (req: Request, res: Response): Promise<void> => {
     try {
-      const { email, password } = req.body;
+    const { email, password } = req.body;
 
-      const ngo = await Ngo.findOne({ email });
-      if (!ngo) {
-        res.status(401).json({ message: "Invalid credentials" });
-        return;
-      }
-
-      // Compare plain text password with stored hash
-      const isMatch = await bcrypt.compare(password, ngo.password);
+    // 1️⃣ Try NGO login
+    const ngo = await Ngo.findOne({ email });
+    if (ngo) {
+      const isMatch = await ngo.comparePassword(password);
       if (!isMatch) {
         res.status(401).json({ message: "Invalid credentials" });
         return;
       }
 
-      const token = jwt.sign({ userId: ngo._id }, JWT_SECRET, {
-        expiresIn: "24h",
-      });
+      const token = jwt.sign(
+        {
+          id: ngo._id,
+          role: "ngo",
+          ngoId: ngo._id,
+        },
+        JWT_SECRET,
+        { expiresIn: "24h" }
+      );
 
       res.json({
         token,
+        role: "ngo",
         ngo: {
           id: ngo._id,
           name: ngo.name,
@@ -2377,87 +2416,63 @@ export const ngoController = {
           profileComplete: ngo.profileComplete,
         },
       });
-    } catch (error) {
-      res.status(500).json({ message: "Error logging in", error });
+      return;
     }
+
+    // 2️⃣ Try invited NGO user login
+    const user = await User.findOne({ email });
+    if (!user || !user.isActive) {
+      res.status(401).json({ message: "Invalid credentials" });
+      return;
+    }
+
+    const isMatch = await user.comparePassword(password);
+    if (!isMatch) {
+      res.status(401).json({ message: "Invalid credentials" });
+      return;
+    }
+
+    const token = jwt.sign(
+      {
+        id: user._id,
+        role: "member",
+        ngoId: user.ngoId,
+        permissions: user.permissions,
+      },
+      JWT_SECRET,
+      { expiresIn: "24h" }
+    );
+
+    res.json({
+      token,
+      role: "member",
+      user: {
+        id: user._id,
+        name: `${user.firstName} ${user.lastName}`,
+        email: user.email,
+        permissions: user.permissions,
+      },
+    });
+  } catch (error) {
+    res.status(500).json({ message: "Error logging in", error });
+  }
   },
 
-  // login: async (req: Request, res: Response): Promise<void> => {
-  //   try {
-  //   const { email, password } = req.body;
-
-  //   if (!email || !password) {
-  //     res.status(400).json({ message: "Email and password are required" });
-  //     return;
-  //   }
-
-  //   // First, check NGO table
-  //   let account: any = await Ngo.findOne({ email });
-  //   let role = "ngo";
-
-  //   // If not found in NGO, check User table
-  //   if (!account) {
-  //     account = await User.findOne({ email });
-  //     role = "ngo";
-  //   }
-
-  //   if (!account) {
-  //     res.status(401).json({ message: "Invalid credentials" });
-  //     return;
-  //   }
-
-  //   // Compare password with hashed password
-  //   const isMatch = await bcrypt.compare(password, account.password);
-  //   if (!isMatch) {
-  //     res.status(401).json({ message: "Invalid credentials" });
-  //     return;
-  //   }
-
-  //   // Generate JWT token
-  //   const token = jwt.sign(
-  //     { userId: account._id, role },
-  //     JWT_SECRET,
-  //     { expiresIn: "24h" }
-  //   );
-
-  //   // Prepare response
-  //   const responseData =
-  //     role === "ngo"
-  //       ? {
-  //           id: account._id,
-  //           name: account.name,
-  //           email: account.email,
-  //           status: account.status,
-  //           profileComplete: account.profileComplete,
-  //         }
-  //       : {
-  //           id: account._id,
-  //           firstName: account.firstName,
-  //           lastName: account.lastName,
-  //           email: account.email,
-  //         };
-
-  //   res.json({
-  //     token,
-  //     role,
-  //     account: responseData,
-  //   });
-  // } catch (error: any) {
-  //   console.error("Login error:", error);
-  //   res.status(500).json({ message: "Error logging in", error: error.message });
-  // }
-  // },
-
-  // Get NGO profile with complete details and all campaigns
   getProfile: async (req: Request, res: Response): Promise<void> => {
     try {
-      const ngoId = req.user?.id;
+      const ngoId = req.user?.ngoId;
 
       // Get the NGO's basic info
       const ngo = await Ngo.findById(ngoId).select("-password");
       if (!ngo) {
         res.status(404).json({ message: "NGO not found" });
         return;
+      }
+
+      let loggedInUser = null;
+
+      if (req.user?.role === "member") {
+        loggedInUser = await User.findById(req.user?.id).select("-password");
       }
 
       // Get all campaigns created by this NGO with all details
@@ -2526,6 +2541,7 @@ export const ngoController = {
         },
         campaigns,
         donors: Array.from(uniqueDonors.values()),
+        loggedInUser
       });
     } catch (error) {
       res.status(500).json({ message: "Error fetching profile", error });
