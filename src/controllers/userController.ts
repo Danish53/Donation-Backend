@@ -9,41 +9,44 @@ import crypto from "crypto";
 const JWT_SECRET = process.env.JWT_SECRET || "your-secret-key";
 
 export const userController = {
-  // register: async (req: Request, res: Response): Promise<void> => {
-  //   try {
-  //     const { email, password, name } = req.body;
+  register: async (req: Request, res: Response): Promise<void> => {
+    try {
+      const { email, password, firstName, lastName } = req.body;
 
-  //     const existingUser = await User.findOne({ email });
-  //     if (existingUser) {
-  //       res.status(400).json({ message: "User already exists" });
-  //       return;
-  //     }
+      const existingUser = await User.findOne({ email });
+      if (existingUser) {
+        res.status(400).json({ message: "User already exists" });
+        return;
+      }
 
-  //     const user = new User({
-  //       email,
-  //       password,
-  //       name,
-  //     });
+      const user = new User({
+        email,
+        password,
+        firstName,
+        lastName,
+        role: "user",
+      });
 
-  //     await user.save();
+      await user.save();
 
-  //     const token = jwt.sign({ userId: user._id }, JWT_SECRET, {
-  //       expiresIn: "24h",
-  //     });
+      const token = jwt.sign({ userId: user._id }, JWT_SECRET, {
+        expiresIn: "24h",
+      });
 
-  //     res.status(201).json({
-  //       message: "User created successfully",
-  //       token,
-  //       user: {
-  //         id: user._id,
-  //         email: user.email,
-  //         name: user.name,
-  //       },
-  //     });
-  //   } catch (error) {
-  //     res.status(500).json({ message: "Error creating user", error });
-  //   }
-  // },
+      res.status(201).json({
+        message: "User created successfully",
+        token,
+        user: {
+          id: user._id,
+          email: user.email,
+          firstName: user.firstName,
+          lastName: user.lastName,
+        },
+      });
+    } catch (error) {
+      res.status(500).json({ message: "Error creating user", error });
+    }
+  },
 
   // login: async (req: Request, res: Response): Promise<void> => {
   //   try {
@@ -70,7 +73,8 @@ export const userController = {
   //       user: {
   //         id: user._id,
   //         email: user.email,
-  //         name: user.name,
+  //         firstName: user.firstName,
+  //         lastName: user.lastName,
   //       },
   //     });
   //   } catch (error) {
@@ -78,18 +82,18 @@ export const userController = {
   //   }
   // },
 
-  // getUser: async (req: Request, res: Response): Promise<void> => {
-  //   try {
-  //     const user = await User.findById(req.user?.id).select("-password");
-  //     if (!user) {
-  //       res.status(404).json({ message: "User not found" });
-  //       return;
-  //     }
-  //     res.json(user);
-  //   } catch (error) {
-  //     res.status(500).json({ message: "Error fetching user", error });
-  //   }
-  // },
+  getUser: async (req: Request, res: Response): Promise<void> => {
+    try {
+      const user = await User.findById(req.user?.id).select("-password");
+      if (!user) {
+        res.status(404).json({ message: "User not found" });
+        return;
+      }
+      res.json(user);
+    } catch (error) {
+      res.status(500).json({ message: "Error fetching user", error });
+    }
+  },
 
   inviteUser: async (req: Request, res: Response): Promise<void> => {
    try {

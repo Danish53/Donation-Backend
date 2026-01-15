@@ -44,4 +44,7 @@ router.put(
 
 router.delete("/:campaignId", auth, campaignController.deleteCampaign);
 
+router.post("/:id/like", campaignController.likeCampaign);
+router.post("/:id/unlike", campaignController.unLikeCampaign);
+
 export default router;

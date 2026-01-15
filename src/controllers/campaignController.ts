@@ -510,6 +510,64 @@ export const campaignController = {
     }
   },
 
+  likeCampaign: async (req: Request, res: Response): Promise<void> => {
+    try {
+    const { id } = req.params;
+    const userIP = req.ip || "unknown";
+
+    if (!userIP) {
+       res.status(400).json({ message: "Cannot detect user IP" });
+       return;
+    }
+
+    const campaign = await Campaign.findById(id);
+    if (!campaign){
+      res.status(404).json({ message: "Campaign not found" });
+      return;
+    }
+
+    // Optional: prevent multiple likes from same IP
+    if (!campaign.likedIPs.includes(userIP)) {
+      campaign.likes = (campaign.likes || 0) + 1;
+      campaign.likedIPs.push(userIP);
+      await campaign.save();
+    }
+
+    res.json({ likes: campaign.likes });
+  } catch (err) {
+    res.status(500).json({ message: "Error liking campaign", error: err });
+  }
+  },
+
+  unLikeCampaign: async (req: Request, res: Response): Promise<void> => {
+    try {
+    const { id } = req.params;
+    const userIP = req.ip || "unknown";
+
+    if (!userIP) {
+       res.status(400).json({ message: "Cannot detect user IP" });
+       return;
+    }
+
+    const campaign = await Campaign.findById(id);
+    if (!campaign){
+      res.status(404).json({ message: "Campaign not found" });
+      return;
+    }
+
+    // Optional: prevent multiple unlikes from same IP
+    if (campaign.likedIPs.includes(userIP)) {
+      campaign.likes = Math.max((campaign.likes || 1) - 1, 0);
+      campaign.likedIPs = campaign.likedIPs.filter(ip => ip !== userIP);
+      await campaign.save();
+    }
+
+    res.json({ likes: campaign.likes });
+  } catch (err) {
+    res.status(500).json({ message: "Error unliking campaign", error: err });
+  }
+  },
+
   // Add donation to campaign
   addDonation: async (req: Request, res: Response): Promise<void> => {
     try {

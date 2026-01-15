@@ -6,9 +6,9 @@ import { upload } from "../middleware/upload";
 const router = express.Router();
 
 // Auth routes
-// router.post("/register", userController.register);
+router.post("/register", userController.register);
 // router.post("/login", userController.login);
-// router.get("/me", auth, userController.getUser);
+router.get("/me", auth, userController.getUser);
 
 // // Example of file upload route
 // router.post(

@@ -68,4 +68,5 @@ router.get("/paypal-client-token", ngoController.generatePaypalClientToken);
 router.get("/organization-types-all", ngoController.getOrganizationTypesAll);
 router.get("/cause-types-all", ngoController.getCauseTypesAll);
 
+
 export default router;

@@ -279,6 +279,7 @@
 // export const Campaign = mongoose.model<ICampaign>("Campaign", campaignSchema);
 
 
+
 import mongoose, { Document, Schema } from "mongoose";
 
 export interface ISuggestedAmountItem {
@@ -364,7 +365,8 @@ export interface ICampaign extends Document {
 
   cause: string;            // ab simple string
   campaignType?: string;    // Event / Donation / ...
-
+  likes: number;
+  likedIPs: string[];
   country: string;
   media: {
     mainImage: string;
@@ -501,6 +503,9 @@ const campaignSchema = new Schema<ICampaign>(
       type: String,
       required: true,
     },
+
+    likes: { type: Number, default: 0 },
+    likedIPs: { type: [String], default: [] },
 
     campaignType: {
       type: String,

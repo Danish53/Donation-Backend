@@ -31,7 +31,6 @@ const userSchema = new Schema<IUser>({
   ngoId: {
     type: Schema.Types.ObjectId,
     ref: "Ngo",
-    required: true,
   },
 
   invitedBy: {
