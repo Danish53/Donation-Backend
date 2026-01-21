@@ -11,7 +11,10 @@ import {
 const router = express.Router();
 
 // Public routes
-router.post("/register", upload.single("profileImage"), ngoController.registerBasic);
+router.post("/register", upload.fields([
+    { name: "profileImage", maxCount: 1 },
+    { name: "workSamples", maxCount: 5 },
+  ]), ngoController.registerBasic);
 router.post("/login", ngoController.login);
 
 // Protected NGO routes
@@ -67,6 +70,12 @@ router.get("/paypal-client-token", ngoController.generatePaypalClientToken);
 // organization causes routes
 router.get("/organization-types-all", ngoController.getOrganizationTypesAll);
 router.get("/cause-types-all", ngoController.getCauseTypesAll);
+
+// ngo stripe balance
+router.get("/stripe/balance", auth, ngoController.getNgoBalanceStripe);
+router.get("/stripe/transactions", auth, ngoController.getNgoTransactionsStripe);
+router.get("/stripe/payouts", auth, ngoController.getNgoPayoutsStripe);
+router.post("/stripe/payout", auth, ngoController.createNgoPayoutStripe);
 
 
 export default router;

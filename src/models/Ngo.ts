@@ -507,7 +507,7 @@ export interface INgo {
   missionStatement?: string;
   programs?: string[];
   programsOther?: string;
-  workSamples?: string;
+  workSamples?: string[];
 
   // SECTION 7 — Simple banking details from onboarding
   bankName?: string;
@@ -655,7 +655,7 @@ const ngoSchema = new Schema<INgoDocument>(
     missionStatement: { type: String },
     programs: [{ type: String }],
     programsOther: { type: String },
-    workSamples: { type: String },
+    workSamples: [{ type: String }],
 
     // SECTION 7
     bankName: { type: String },

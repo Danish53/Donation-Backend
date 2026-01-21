@@ -173,7 +173,6 @@ export const ngoController = {
       missionStatement,
       programs,              // <- as‑is from body (string ya array dono ho sakte)
       programsOther,
-      workSamples,
 
       // SECTION 7
       bankName,
@@ -191,7 +190,21 @@ export const ngoController = {
       linkedin,
     } = req.body;
 
-    const profileImage = req.file ? req.file.path : undefined;
+    const files = req.files as {
+    profileImage?: Express.Multer.File[];
+    workSamples?: Express.Multer.File[];
+    };
+
+  // Profile image
+  const profileImage = files?.profileImage?.[0]
+  ? "/" + files.profileImage[0].path.split("\\").slice(-2).join("/")
+  : null;
+
+  // Work samples
+  const workSamples = files?.workSamples?.map((f) =>
+  "/" + f.path.split("\\").slice(-2).join("/")
+  ) || [];
+
 
     // ---------- normalize programs (string | string[] -> string[]) ----------
     let normalizedPrograms: string[] = [];
@@ -321,10 +334,11 @@ export const ngoController = {
         email: ngo.email,
         status: ngo.status,
         organizationType: ngo.organizationType,
-        causeType: ngo.causeType,
+        // causeType: ngo.causeType,
         country: ngo.country,
         city: ngo.city,
         profileImage: ngo.profileImage,
+        workSamples: ngo.workSamples,
       },
     });
   } catch (error) {
@@ -2949,6 +2963,187 @@ export const ngoController = {
         error: "Error fetching cause types",
         message: error instanceof Error ? error.message : "Unknown error",
       });
+    }
+  },
+
+  // get ngo balance
+  getNgoBalanceStripe: async (req: Request, res: Response): Promise<void> => {
+    try {
+    const ngoId = req.user?.id;
+    const ngo = await Ngo.findById(ngoId);
+
+    if (!ngo?.stripeAccountId) {
+       res.status(400).json({ success: false, message: "NGO Stripe account not found" });
+       return
+    }
+
+    const balance = await stripe.balance.retrieve({
+      stripeAccount: ngo.stripeAccountId,
+    });
+
+    res.status(200).json({
+      success: true,
+      available: balance.available.map((b) => ({
+        currency: b.currency,
+        amount: b.amount / 100, // convert cents to dollars
+      })),
+      pending: balance.pending.map((b) => ({
+        currency: b.currency,
+        amount: b.amount / 100,
+      })),
+    });
+    } catch (err: any) {
+    console.error("getNgoBalance error:", err);
+    res.status(500).json({ success: false, message: "Failed to fetch balance" });
+    }
+  },
+
+  getNgoTransactionsStripe: async (req: Request, res: Response): Promise<void> => {
+   try {
+    const ngoId = req.user?.id;
+    const ngo = await Ngo.findById(ngoId);
+
+    if (!ngo?.stripeAccountId) {
+       res.status(400).json({ success: false, message: "NGO Stripe account not found" });
+       return
+    }
+
+    const charges = await stripe.payouts.list(
+      {
+        limit: 100, // params
+      },
+      {
+        stripeAccount: ngo.stripeAccountId, // options
+      }
+    );
+
+
+const formattedCharges = charges.data.map((c) => ({
+  id: c.id,
+  amount: c.amount / 100,
+  currency: c.currency,
+  status: c.status,
+  description: c.description,
+  created: new Date(c.created * 1000),
+  // donorEmail: c.billing_details?.email || null,
+  applicationFee: c.application_fee ? (typeof c.application_fee === "number" ? c.application_fee / 100 : 0) : 0,
+}));
+
+
+    res.status(200).json({ success: true, transactions: formattedCharges });
+   } catch (err: any) {
+    console.error("getNgoTransactions error:", err);
+    res.status(500).json({ success: false, message: "Failed to fetch transactions" });
+   }
+  },
+
+  getNgoPayoutsStripe: async (req: Request, res: Response): Promise<void> => {
+  try {
+    const ngoId = req.user?.id;
+    const ngo = await Ngo.findById(ngoId);
+
+    if (!ngo?.stripeAccountId) {
+       res.status(400).json({ success: false, message: "NGO Stripe account not found" });
+       return
+    }
+
+    const payouts = await stripe.payouts.list(
+      {
+        limit: 100, // params
+      },
+      {
+        stripeAccount: ngo.stripeAccountId, // options
+      }
+    );
+
+    const formattedPayouts = payouts.data.map((p) => ({
+      id: p.id,
+      amount: p.amount / 100,
+      currency: p.currency,
+      status: p.status,
+      arrivalDate: new Date(p.arrival_date * 1000),
+      method: p.method,
+    }));
+
+    res.status(200).json({ success: true, payouts: formattedPayouts });
+  } catch (err: any) {
+    console.error("getNgoPayouts error:", err);
+    res.status(500).json({ success: false, message: "Failed to fetch payouts" });
+  }
+  },
+
+  createNgoPayoutStripe: async (
+  req: Request,
+  res: Response
+  ): Promise<void> => {
+    try {
+    const ngoId = req.user?.id;
+    const ngo = await Ngo.findById(ngoId);
+
+    if (!ngo?.stripeAccountId) {
+      res
+        .status(400)
+        .json({ success: false, message: "NGO Stripe account not found" });
+      return;
+    }
+
+    const { amount, currency } = req.body;
+
+    if (!amount || amount <= 0) {
+      res
+        .status(400)
+        .json({ success: false, message: "Invalid payout amount" });
+      return;
+    }
+
+    const payoutCurrency = (currency || "usd").toLowerCase();
+
+    // Optional: check payouts_enabled
+    const account = await stripe.accounts.retrieve(ngo.stripeAccountId);
+    if (!account.payouts_enabled) {
+      res.status(400).json({
+        success: false,
+        message: "Payouts not enabled for this NGO Stripe account",
+      });
+      return;
+    }
+
+    // Optional: verify available balance >= requested amount
+    const balance = await stripe.balance.retrieve({
+      stripeAccount: ngo.stripeAccountId,
+    });
+
+    const availableForCurrency =
+      balance.available.find(
+        (b) => b.currency === payoutCurrency
+      )?.amount || 0; // in cents
+
+    const requestedInCents = Math.round(amount * 100);
+
+    if (requestedInCents > availableForCurrency) {
+      res.status(400).json({
+        success: false,
+        message: "Requested amount exceeds available balance",
+      });
+      return;
+    }
+
+    const payout = await stripe.payouts.create(
+      {
+        amount: requestedInCents,
+        currency: payoutCurrency,
+      },
+      {
+        stripeAccount: ngo.stripeAccountId,
+      }
+    );
+
+    res.status(200).json({ success: true, payout });
+    } catch (err: any) {
+    console.error("createNgoPayoutStripe error:", err);
+    res
+      .status(500)
+      .json({ success: false, message: "Failed to create payout" });
     }
   },
 
