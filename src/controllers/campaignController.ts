@@ -480,6 +480,7 @@ export const campaignController = {
       if (country) query.country = country;
 
       const campaigns = await Campaign.find(query)
+      .sort({ createdAt: -1 })
       .populate("ngoId", "name profileImage")
       .lean();
 

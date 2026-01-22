@@ -269,16 +269,116 @@ const createPaymentIntent = async (
     }
 
     // -------------------- MONTHLY SUBSCRIPTION --------------------
-    if (frequency === "monthly") {
+    // if (frequency === "monthly") {
+    //   // 1️⃣ Create product & price
+    //   const product = await stripe.products.create({
+    //     name: `Monthly donation for ${campaign.title}`,
+    //   });
+
+    //   const price = await stripe.prices.create({
+    //     unit_amount: Math.round(totalAmount * 100),
+    //     currency: "usd",
+    //     recurring: { interval: "month" },
+    //     product: product.id,
+    //   });
+
+    //   // 2️⃣ Create customer
+    //   const customer = await stripe.customers.create({
+    //     name: donorName,
+    //     email: donorEmail,
+    //     metadata: { campaignId, tipAmount: tipAmount?.toString() || "0", frequency },
+    //   });
+
+    //   // 3️⃣ Attach payment method
+    //   await stripe.paymentMethods.attach(paymentMethod, { customer: customer.id });
+    //   await stripe.customers.update(customer.id, {
+    //     invoice_settings: { default_payment_method: paymentMethod },
+    //   });
+
+    //   const applicationFeePercent = Number(((tipAmount / amount) * 100).toFixed(2));
+
+    //   // 4️⃣ Create subscription (with expansion)
+    //   const subscription = await stripe.subscriptions.create({
+    //     customer: customer.id,
+    //     items: [{ price: price.id }],
+    //     default_payment_method: paymentMethod,
+    //     expand: ["latest_invoice.payment_intent", "pending_setup_intent"],
+    //     collection_method: "charge_automatically",
+    //     transfer_data: { destination: ngo.stripeAccountId },
+    //     application_fee_percent: applicationFeePercent,
+    //   });
+
+    //   // 5️⃣ Handle payment intent or setup intent
+    //   let paymentIntent = (subscription.latest_invoice as any)?.payment_intent;
+    //   let setupIntent = (subscription as any)?.pending_setup_intent;
+
+    //   if (!paymentIntent && subscription.latest_invoice) {
+    //     // retrieve invoice fully expanded (sometimes not included)
+    //     const refreshed = await stripe.invoices.retrieve(
+    //       (subscription.latest_invoice as any).id,
+    //       { expand: ["payment_intent"] }
+    //     );
+    //     paymentIntent = (refreshed as any).payment_intent;
+    //   }
+
+    //   console.log("invoice:", subscription?.latest_invoice, "status:", (subscription.latest_invoice as any).status);
+    //   console.log("setupIntent:", setupIntent);
+    //   console.log("paymentIntent:", paymentIntent?.id);
+
+    //   // 6️⃣ Store in DB even if already paid (so recurring works)
+      
+    //   if (!paymentIntent || !paymentIntent.client_secret) {
+    //     // Invoice is already paid → store subscription and return gracefully
+    //     await Campaign.findByIdAndUpdate(campaignId, {
+    //       $push: {
+    //         pendingRecurringPayments: {
+    //           setupTokenId: subscription.id,
+    //           amount,
+    //           tipAmount: tipAmount || 0,
+    //           donorName,
+    //           donorEmail,
+    //           timestamp: new Date(),
+    //         },
+    //       },
+    //       $inc: { totalRaised: amount - (tipAmount || 0) },
+    //     });
+
+    //     res.status(200).json({
+    //       message: "Subscription created and invoice already paid.",
+    //       subscriptionId: subscription.id,
+    //       totalAmount,
+    //       currency: "USD",
+    //       type: "monthly",
+    //     });
+    //     return
+    //   }
+
+    //   // Otherwise send the client secret
+    //   res.status(200).json({
+    //     clientSecret: paymentIntent.client_secret,
+    //     subscriptionId: subscription.id,
+    //     totalAmount,
+    //     currency: "USD",
+    //     type: "monthly",
+    //   });
+    //   return
+    // }
+
+    // -------------------- MONTHLY / YEARLY SUBSCRIPTION --------------------
+    if (frequency === "monthly" || frequency === "yearly") {
+      const interval = frequency === "monthly" ? "month" : "year";
+      const frequencyLabel =
+        frequency === "monthly" ? "Monthly" : "Yearly";
+
       // 1️⃣ Create product & price
       const product = await stripe.products.create({
-        name: `Monthly donation for ${campaign.title}`,
+        name: `${frequencyLabel} donation for ${campaign.title}`,
       });
 
       const price = await stripe.prices.create({
         unit_amount: Math.round(totalAmount * 100),
         currency: "usd",
-        recurring: { interval: "month" },
+        recurring: { interval }, // "month" or "year"
         product: product.id,
       });
 
@@ -286,18 +386,26 @@ const createPaymentIntent = async (
       const customer = await stripe.customers.create({
         name: donorName,
         email: donorEmail,
-        metadata: { campaignId, tipAmount: tipAmount?.toString() || "0", frequency },
+        metadata: {
+          campaignId,
+          tipAmount: tipAmount?.toString() || "0",
+          frequency, // "monthly" | "yearly"
+        },
       });
 
       // 3️⃣ Attach payment method
-      await stripe.paymentMethods.attach(paymentMethod, { customer: customer.id });
+      await stripe.paymentMethods.attach(paymentMethod, {
+        customer: customer.id,
+      });
       await stripe.customers.update(customer.id, {
         invoice_settings: { default_payment_method: paymentMethod },
       });
 
-      const applicationFeePercent = Number(((tipAmount / amount) * 100).toFixed(2));
+      const applicationFeePercent = Number(
+        (((tipAmount || 0) as number) / Number(amount) * 100).toFixed(2)
+      );
 
-      // 4️⃣ Create subscription (with expansion)
+      // 4️⃣ Create subscription
       const subscription = await stripe.subscriptions.create({
         customer: customer.id,
         items: [{ price: price.id }],
@@ -308,12 +416,11 @@ const createPaymentIntent = async (
         application_fee_percent: applicationFeePercent,
       });
 
-      // 5️⃣ Handle payment intent or setup intent
+      // 5️⃣ Check payment intent (first invoice)
       let paymentIntent = (subscription.latest_invoice as any)?.payment_intent;
       let setupIntent = (subscription as any)?.pending_setup_intent;
 
       if (!paymentIntent && subscription.latest_invoice) {
-        // retrieve invoice fully expanded (sometimes not included)
         const refreshed = await stripe.invoices.retrieve(
           (subscription.latest_invoice as any).id,
           { expand: ["payment_intent"] }
@@ -321,14 +428,18 @@ const createPaymentIntent = async (
         paymentIntent = (refreshed as any).payment_intent;
       }
 
-      console.log("invoice:", subscription?.latest_invoice, "status:", (subscription.latest_invoice as any).status);
+      console.log(
+        "invoice:",
+        subscription?.latest_invoice,
+        "status:",
+        (subscription.latest_invoice as any).status
+      );
       console.log("setupIntent:", setupIntent);
       console.log("paymentIntent:", paymentIntent?.id);
 
-      // 6️⃣ Store in DB even if already paid (so recurring works)
-      
+      // 6️⃣ Store in DB, even if already paid
       if (!paymentIntent || !paymentIntent.client_secret) {
-        // Invoice is already paid → store subscription and return gracefully
+        // First invoice already paid automatically
         await Campaign.findByIdAndUpdate(campaignId, {
           $push: {
             pendingRecurringPayments: {
@@ -337,6 +448,7 @@ const createPaymentIntent = async (
               tipAmount: tipAmount || 0,
               donorName,
               donorEmail,
+              frequency, // ✅ store "monthly" / "yearly"
               timestamp: new Date(),
             },
           },
@@ -348,20 +460,20 @@ const createPaymentIntent = async (
           subscriptionId: subscription.id,
           totalAmount,
           currency: "USD",
-          type: "monthly",
+          type: frequency, // "monthly" or "yearly"
         });
-        return
+        return;
       }
 
-      // Otherwise send the client secret
+      // Otherwise send client secret for 3DS / confirmation on client
       res.status(200).json({
         clientSecret: paymentIntent.client_secret,
         subscriptionId: subscription.id,
         totalAmount,
         currency: "USD",
-        type: "monthly",
+        type: frequency, // "monthly" or "yearly"
       });
-      return
+      return;
     }
 
     // -------------------- INVALID FREQUENCY --------------------
