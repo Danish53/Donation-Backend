@@ -4,6 +4,7 @@ import jwt from "jsonwebtoken";
 import { Admin } from "../models/Admin";
 import OrganizationType from "../models/OrganizationType";
 import CauseType from "../models/CauseType";
+import { Ngo } from "../models/Ngo";
 
 dotenv.config();
 
@@ -256,5 +257,38 @@ export const adminController = {
       });
     }
   },
+
+  updateNgoStatus: async (req: Request, res: Response): Promise<void> => {
+    try { 
+    const { ngoId, isActive } = req.body;
+
+    if (!ngoId || typeof isActive !== "boolean") {
+      res.status(400).json({
+        message: "ngoId and isActive (boolean) are required",
+      });
+      return;
+    }
+
+    const ngo = await Ngo.findById(ngoId);
+    if (!ngo) {
+      res.status(404).json({ message: "NGO not found" });
+      return;
+    }
+
+    ngo.isActive = isActive;
+    await ngo.save();
+
+    res.status(200).json({
+      success: true,
+      message: `NGO has been ${isActive ? "activated" : "deactivated"} successfully`,
+    });
+  } catch (error) {
+    res.status(500).json({
+      message: "Error updating NGO status",
+      error,
+    });
+  }
+},
+
 
 };

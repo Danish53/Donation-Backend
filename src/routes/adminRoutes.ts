@@ -32,4 +32,7 @@ router.get("/cause-types", adminController.getCauseTypes);
 router.put("/cause-types/:causeId", adminController.updateCauseType);
 router.delete("/cause-types/:causeId", adminController.deleteCauseType);
 
+router.post("/status-active", adminController.updateNgoStatus);
+
+
 export default router;

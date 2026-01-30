@@ -561,7 +561,7 @@ export interface INgo {
       };
     };
   };
-
+  isActive: boolean,
   // Status
   status: "pending" | "approved" | "rejected";
   registrationDate: Date;
@@ -709,7 +709,10 @@ const ngoSchema = new Schema<INgoDocument>(
         },
       },
     },
-
+    isActive: {
+      type: Boolean,
+      default: true,
+    },
     // Status & Meta
     status: {
       type: String,

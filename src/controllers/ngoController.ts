@@ -63,7 +63,7 @@ export interface INgo extends Document {
     postal_code?: string;
     registration_number?: string;
   };
-
+  isActive?: boolean;
   status?: "pending" | "approved" | "rejected";
   NGOAccountReady?: boolean;
   profileComplete?: boolean;
@@ -2402,6 +2402,12 @@ export const ngoController = {
 
     // 1️⃣ Try NGO login
     const ngo = await Ngo.findOne({ email });
+    if (!ngo?.isActive) {
+      res.status(403).json({
+      message: "Your account is deactivated. Please contact support.",
+    });
+    return;
+  }
     if (ngo) {
       const isMatch = await ngo.comparePassword(password);
       if (!isMatch) {
@@ -3146,5 +3152,27 @@ const formattedCharges = charges.data.map((c) => ({
       .json({ success: false, message: "Failed to create payout" });
     }
   },
+
+  // ngo account deactivate
+  deactivateNgo: async (req: Request, res: Response): Promise<void> => {
+  try {
+    const ngoId = req.user?.id;
+
+    const ngo = await Ngo.findById(ngoId);
+    if (!ngo) {
+       res.status(404).json({ message: "NGO not found" });
+       return
+    }
+
+    ngo.isActive = false;
+    await ngo.save();
+
+    res.json({
+      message: "Your account has been deactivated successfully",
+    });
+  } catch (error) {
+    res.status(500).json({ message: "Error deactivating account", error });
+  }
+},
 
 }

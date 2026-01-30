@@ -77,5 +77,8 @@ router.get("/stripe/transactions", auth, ngoController.getNgoTransactionsStripe)
 router.get("/stripe/payouts", auth, ngoController.getNgoPayoutsStripe);
 router.post("/stripe/payout", auth, ngoController.createNgoPayoutStripe);
 
+// deactivate account
+router.post("/deactivate", auth, ngoController.deactivateNgo);
+
 
 export default router;
