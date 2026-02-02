@@ -2,11 +2,19 @@ import express from "express";
 import { ngoController } from "../controllers/ngoController";
 import { adminAuth } from "../middleware/adminAuth";
 import { auth } from "../middleware/auth";
+import rateLimit from "express-rate-limit";
 import {
   processSingleUploadedFile,
   processUploadedFiles,
   upload,
 } from "../middleware/upload";
+
+const limiter = rateLimit({
+  windowMs: 10 * 60 * 1000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+});
 
 const router = express.Router();
 
@@ -16,6 +24,9 @@ router.post("/register", upload.fields([
     { name: "workSamples", maxCount: 5 },
   ]), ngoController.registerBasic);
 router.post("/login", ngoController.login);
+router.post("/forgot-password", limiter, ngoController.requestPasswordReset);
+router.post("/forgot-password/verify", limiter, ngoController.verifyPasswordResetOtp);
+router.post("/forgot-password/complete", limiter, ngoController.completePasswordReset);
 
 // Protected NGO routes
 router.get("/profile", auth, ngoController.getProfile);

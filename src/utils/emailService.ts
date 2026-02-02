@@ -369,7 +369,33 @@ class EmailService {
   };
 
   await this.sendEmail(options);
-}
+  }
+
+  // 7. forgot email
+  async sendPasswordResetOtpEmail(userEmail: string, userName: string, otp: string): Promise<void> {
+    const content = `
+      <div class="header">
+        <h1>Password Reset Code</h1>
+      </div>
+      <div class="content">
+        <h2>Hello ${userName || "there"},</h2>
+        <p>Your password reset OTP is:</p>
+        <div class="donation-details">
+          <p style="font-size:22px; font-weight:700; letter-spacing:2px;">${otp}</p>
+        </div>
+        <p>This code expires in 10 minutes.</p>
+        <p>If you did not request this, you can ignore this email.</p>
+        <a href="${process.env.FRONTEND_URL}/forgot-password/verify?email=${encodeURIComponent(userEmail)}" class="button">Enter OTP</a>
+      </div>
+    `;
+
+    const options: EmailOptions = {
+      to: userEmail,
+      subject: "Your password reset OTP",
+      html: wrapEmailContent(content),
+    };
+    await this.sendEmail(options);
+  }
 
 }
 

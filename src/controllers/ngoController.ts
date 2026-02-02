@@ -6,6 +6,7 @@ import { INgoDocument, Ngo } from "../models/Ngo";
 import { emailService } from "../utils/emailService";
 import path from "path";
 import fs from "fs";
+import crypto from "crypto";
 
 const JWT_SECRET = process.env.JWT_SECRET || "your-secret-key";
 
@@ -14,6 +15,7 @@ import axios from "axios";
 import OrganizationType from "../models/OrganizationType";
 import CauseType from "../models/CauseType";
 import { User } from "../models/User";
+import { PasswordReset } from "../models/PasswordReset";
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || "", {
   apiVersion: "2025-03-31.basil" as any,
@@ -79,6 +81,20 @@ const validateEmail = (email: string): boolean => {
   const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   return re.test(email);
 };
+
+const OTP_LENGTH = 6;
+const OTP_TTL_MIN = 10;
+const TOKEN_TTL_MIN = 15;
+const SALT_ROUNDS = 10;
+const MAX_OTP_ATTEMPTS = 5;
+
+function generateOtp() {
+  const n = crypto.randomInt(0, 10 ** OTP_LENGTH);
+  return String(n).padStart(OTP_LENGTH, "0");
+}
+function generateResetToken() {
+  return crypto.randomBytes(32).toString("hex");
+}
 
 export const ngoController = {
   // registerBasic: async (req: Request, res: Response): Promise<void> => {
@@ -2478,6 +2494,201 @@ export const ngoController = {
   }
   },
 
+  requestPasswordReset: async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { email } = req.body as { email?: string };
+    if (!email) {
+       res.status(400).json({ success: false, error: "Email is required" });
+       return
+    }
+
+    // Find account (NGO first, then invited member)
+    const ngo = await Ngo.findOne({ email });
+    const member = ngo ? null : await User.findOne({ email });
+
+    const account =
+      ngo
+        ? { userType: "ngo" as const, doc: ngo }
+        : member
+          ? { userType: "member" as const, doc: member }
+          : null;
+
+    // Always return generic success to avoid email enumeration
+    if (!account) {
+       res.json({
+        success: true,
+        message: "If an account exists, an OTP has been sent to email.",
+      });
+      return
+    }
+
+    if (account.doc.isActive === false) {
+       res.json({
+        success: true,
+        message: "If an account exists, an OTP has been sent to email.",
+      });
+      return
+    }
+
+    // Generate + store OTP
+    const otp = generateOtp();
+    
+    console.log(otp, "otp")
+    const otpHash = await bcrypt.hash(otp, SALT_ROUNDS);
+    const otpExpiresAt = new Date(Date.now() + OTP_TTL_MIN * 60 * 1000);
+
+    await PasswordReset.findOneAndUpdate(
+      { email },
+      {
+        email,
+        userId: account.doc._id,
+        userType: account.userType,
+        otpHash,
+        otpExpiresAt,
+        attempts: 0,
+        resetTokenHash: undefined,
+        resetTokenExpiresAt: undefined,
+      },
+      { upsert: true, new: true, setDefaultsOnInsert: true }
+    );
+
+    // Send email
+    const displayName =
+  account.userType === "ngo"
+    ? (account.doc as any).name || (account.doc as any).organizationName || (account.doc as any).email
+    : (`${(account.doc as any).firstName ?? ""} ${(account.doc as any).lastName ?? ""}`.trim() || (account.doc as any).email);
+
+    // await emailService.sendPasswordResetOtpEmail(email, otp, displayName);
+
+     res.json({
+      success: true,
+      message: "If an account exists, an OTP has been sent to email.",
+    });
+    return
+  } catch (err) {
+    console.error("requestPasswordReset error:", err);
+     res.status(500).json({ success: false, error: "Failed to process request" });
+     return
+  }
+  },
+
+  verifyPasswordResetOtp: async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { email, otp } = req.body as { email?: string; otp?: string };
+    if (!email || !otp) {
+      res.status(400).json({ success: false, error: "Email and OTP are required" });
+      return;
+    }
+
+    const record = await PasswordReset.findOne({ email });
+    if (!record) {
+      res.status(400).json({ success: false, error: "Invalid or expired OTP" });
+      return;
+    }
+
+    if (record.attempts >= MAX_OTP_ATTEMPTS) {
+      res.status(429).json({ success: false, error: "Too many attempts. Request a new OTP." });
+      return;
+    }
+
+    if (record.otpExpiresAt.getTime() < Date.now()) {
+      res.status(400).json({ success: false, error: "OTP expired. Request a new OTP." });
+      return;
+    }
+
+    const match = await bcrypt.compare(otp, record.otpHash);
+    if (!match) {
+      record.attempts += 1;
+      await record.save();
+      res.status(400).json({ success: false, error: "Invalid OTP" });
+      return;
+    }
+
+    // OTP valid -> issue short-lived reset token
+    const plainToken = generateResetToken();
+    const resetTokenHash = await bcrypt.hash(plainToken, SALT_ROUNDS);
+    const resetTokenExpiresAt = new Date(Date.now() + TOKEN_TTL_MIN * 60 * 1000);
+
+    await PasswordReset.updateOne(
+      { _id: record._id },
+      { $set: { resetTokenHash, resetTokenExpiresAt }, $unset: { otpHash: 1 } },
+      { runValidators: false }
+    );
+
+    res.json({
+      success: true,
+      data: { resetToken: plainToken, expiresInMinutes: TOKEN_TTL_MIN },
+    });
+    return;
+  } catch (err) {
+    console.error("verifyPasswordResetOtp error:", err);
+    res.status(500).json({ success: false, error: "Verification failed" });
+    return;
+  }
+  },
+
+  completePasswordReset: async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { email, token, password } = req.body as {
+      email?: string; token?: string; password?: string;
+    };
+    if (!email || !token || !password) {
+      res.status(400).json({ success: false, error: "Email, token and password are required" });
+      return;
+    }
+    if (password.length < 8) {
+      res.status(400).json({ success: false, error: "Password must be at least 8 characters" });
+      return;
+    }
+
+    const record = await PasswordReset.findOne({ email });
+    if (!record || !record.resetTokenHash || !record.resetTokenExpiresAt) {
+      res.status(400).json({ success: false, error: "Invalid or expired token" });
+      return;
+    }
+
+    if (record.resetTokenExpiresAt.getTime() < Date.now()) {
+      res.status(400).json({ success: false, error: "Token expired" });
+      return;
+    }
+
+    const tokenOk = await bcrypt.compare(token, record.resetTokenHash);
+    if (!tokenOk) {
+      res.status(400).json({ success: false, error: "Invalid token" });
+      return;
+    }
+
+    // Find the actual account (same pattern as requestPasswordReset)
+    const ngo = await Ngo.findOne({ email });
+    const member = ngo ? null : await User.findOne({ email });
+
+    const account =
+      ngo
+        ? { userType: "ngo" as const, doc: ngo }
+        : member
+          ? { userType: "member" as const, doc: member }
+          : null;
+
+    if (!account) {
+      res.status(400).json({ success: false, error: "Account not found" });
+      return;
+    }
+
+    // Set new password; rely on model's pre-save hash
+    (account.doc as any).password = password;
+    await (account.doc as any).save();
+
+    // Cleanup reset record
+    await PasswordReset.deleteMany({ email });
+    res.json({ success: true, message: "Password reset successful" });
+    return;
+  } catch (err) {
+    console.error("completePasswordReset error:", err);
+    res.status(500).json({ success: false, error: "Could not reset password" });
+    return;
+  }
+  },
+
   getProfile: async (req: Request, res: Response): Promise<void> => {
     try {
       const ngoId = req.user?.ngoId;
@@ -3173,6 +3384,6 @@ const formattedCharges = charges.data.map((c) => ({
   } catch (error) {
     res.status(500).json({ message: "Error deactivating account", error });
   }
-},
+  },
 
 }

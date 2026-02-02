@@ -294,6 +294,7 @@ export interface IDonation {
   donorEmail?: string;
   amount: number;
   tipAmount: number;
+  receivedBy: string;
   message?: string;
   timestamp: Date;
   isRecurring?: boolean;
@@ -303,9 +304,11 @@ export interface IPendingPayment {
   orderId: string;
   amount: number;
   tipAmount: number;
+  receivedBy: string;
   donorName: string;
   donorEmail?: string;
   paymentMethod: string;
+  paymentSource: string;
   message?: string;
   timestamp: Date;
   isRecurring?: boolean;
@@ -315,9 +318,11 @@ export interface IRecurringPayment {
   paymentToken: string;
   amount: number;
   tipAmount: number;
+  receivedBy: string;
   donorName: string;
   donorEmail?: string;
   paymentMethod: string;
+  paymentSource: string;
   frequency: string;
   timestamp: Date;
 }
@@ -326,9 +331,12 @@ export interface IPendingRecurringPayment {
   setupTokenId: string;
   amount: number;
   tipAmount: number;
+  adminAmount: number;
+  receivedBy: string;
   donorName: string;
   donorEmail?: string;
   paymentMethod: string;
+  paymentSource: string;
   frequency: string;
   timestamp: Date;
 }
@@ -415,6 +423,10 @@ const donationSchema = new Schema({
     type: Number,
     required: true,
   },
+  receivedBy: {
+    type: String,
+    required: true,
+  },
   message: {
     type: String,
   },
@@ -441,6 +453,14 @@ const pendingPaymentSchema = new Schema({
     type: Number,
     required: true,
   },
+  adminAmount: {
+    type: Number,
+    required: true,
+  },
+  receivedBy: {
+    type: String,
+    required: true,
+  },
   donorName: {
     type: String,
     required: true,
@@ -449,6 +469,10 @@ const pendingPaymentSchema = new Schema({
     type: String,
   },
   paymentMethod: {
+    type: String,
+    required: true,
+  },
+  paymentSource: {
     type: String,
     required: true,
   },
@@ -470,9 +494,11 @@ const recurringPaymentSchema = new Schema({
   donorId: { type: Schema.Types.ObjectId, ref: "User" },
   amount: { type: Number, required: true },
   tipAmount: { type: Number, required: true },
+  receivedBy: { type: String, required: true },
   donorName: { type: String, required: true },
   donorEmail: { type: String },
   paymentMethod: { type: String, required: true },
+  paymentSource: { type: String, required: true },
   frequency: { type: String, default: "monthly" },
   timestamp: { type: Date, default: Date.now },
 });
@@ -482,9 +508,12 @@ const pendingRecurringPaymentSchema = new Schema({
   donorId: { type: Schema.Types.ObjectId, ref: "User" },
   amount: { type: Number, required: true },
   tipAmount: { type: Number, required: true },
+  adminAmount: { type: Number, required: true },
+  receivedBy: { type: String, required: true },
   donorName: { type: String, required: true },
   donorEmail: { type: String },
   paymentMethod: { type: String, required: true },
+  paymentSource: { type: String, required: true },
   frequency: { type: String, default: "monthly" },
   timestamp: { type: Date, default: Date.now },
 });
