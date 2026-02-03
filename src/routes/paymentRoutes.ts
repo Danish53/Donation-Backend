@@ -28,6 +28,10 @@ interface PaypalOnboardingParams {
   ngoId: string;
 }
 
+interface PaymentIntent {
+  
+}
+
 interface PayPalLink {
   rel: string;
   href: string;
@@ -514,7 +518,7 @@ const createPaymentIntent = async (
       return;
     }
 
-    const baseAmount = Number(amount) || 0;         // donation amount (without tip)
+    const baseAmount = Number(amount) || 0; 
     const tip = Number(tipAmount || 0);
     const totalAmount = baseAmount + tip;
     const totalCents = Math.round(totalAmount * 100);
@@ -581,7 +585,7 @@ const createPaymentIntent = async (
             orderId: paymentIntent.id,
             amount: baseAmount,
             tipAmount: tip,
-            adminAmount: isCardPayment ? tip : baseAmount + tip,
+            adminAmount: isCardPayment ? tip : totalAmount,
             donorName,
             donorEmail,
             paymentMethod, // Stripe PM id
@@ -678,7 +682,7 @@ const createPaymentIntent = async (
             setupTokenId: subscription.id,
             amount: baseAmount,
             tipAmount: tip,
-            adminAmount: isCardPayment ? tip : baseAmount + tip,
+            adminAmount: isCardPayment ? tip : totalAmount,
             donorName,
             donorEmail,
             frequency,
@@ -790,8 +794,182 @@ router.post("/create-payment-intent", createPaymentIntent);
 //   }
 // };
 
+// const confirmPayment = async (req: Request, res: Response): Promise<void> => {
+//   const { paymentIntentId, type } = req.body;
+
+//   if (!paymentIntentId) {
+//     res.status(400).json({ error: "Missing paymentIntentId" });
+//     return;
+//   }
+
+//   try {
+//     let payment: any;
+
+//     if (type === "one-time" || type === "once") {
+//       payment = await stripe.paymentIntents.retrieve(paymentIntentId);
+//     } else if (type === "monthly") {
+//       // paymentIntentId actually comes from subscription.latest_invoice.payment_intent
+//       const pi = await stripe.paymentIntents.retrieve(paymentIntentId);
+//       payment = pi;
+//     } else {
+//       res.status(400).json({ error: "Invalid type" });
+//       return;
+//     }
+
+//     if (payment.status === "succeeded") {
+//       const campaignId = payment.metadata.campaignId;
+//       const tipAmount = parseFloat(payment.metadata.tipAmount || "0");
+//       // Prefer amount_received for succeeded intents; fallback to amount
+//       const totalCharged = ((payment.amount_received ?? payment.amount) ?? 0) / 100;
+//       const donationNet = Number((totalCharged - tipAmount).toFixed(2)); // raised without tip
+//       console.log(donationNet, "donation net ngo")
+
+//       // const fundsDestination = payment.metadata.fundsDestination || "connected_account"; // or "platform"
+//       // const receivedBy = fundsDestination === "platform" ? "admin" : "ngo";
+//       const paymentSource = payment.metadata.paymentMethod || "card"; // card | bank
+//       const isCardPayment = paymentSource === "card";
+//       const ngoAmount = isCardPayment ? donationNet : 0;
+//       const adminAmount = isCardPayment ? tipAmount : totalCharged;
+//       const donation = {
+//         amount: totalCharged,
+//         ngoAmount,
+//         tipAmount,
+//         adminAmount,
+//         donorName: payment.metadata.donorName || "Anonymous",
+//         donorEmail: payment.metadata.donorEmail || "Anonymous",
+//         paymentMethod: paymentSource, // "card" | "bank"
+//         frequency: payment.metadata.frequency || "once",
+//         receivedBy: isCardPayment ? "ngo" : "admin",
+//         timestamp: new Date(),
+//       };
+
+//       if (type === "one-time") {
+//         await Campaign.findByIdAndUpdate(campaignId, {
+//           $pull: { pendingPayments: { orderId: paymentIntentId } },
+//           $push: { donations: donation },
+//           $inc: { totalRaised: donationNet },
+//         });
+//       } else {
+//         await Campaign.findByIdAndUpdate(campaignId, {
+//           $push: { recurringPayments: donation },
+//           $inc: { totalRaised: donationNet },
+//         });
+//       }
+
+//       res.status(200).json({ success: true, donation });
+//       return;
+//     }
+
+//     res.status(200).json({
+//       success: false,
+//       status: payment.status,
+//       message: "Payment not completed yet",
+//     });
+//   } catch (err) {
+//     console.error("❌ Error confirming payment:", err);
+//     res.status(500).json({ error: "Failed to confirm payment" });
+//   }
+// };
+
+// router.post("/confirm-payment", confirmPayment);
+
+// PAYPAL
+
+const stripeWebhook = async (req: Request, res: Response): Promise<void> => {
+  const sig = req.headers["stripe-signature"] as string;
+
+  let event: Stripe.Event;
+
+  try {
+    event = stripe.webhooks.constructEvent(
+      req.body,
+      sig,
+      process.env.STRIPE_WEBHOOK_SECRET!
+    );
+  } catch (err: any) {
+    console.error("❌ Webhook signature failed", err.message);
+    res.status(400).send(`Webhook Error`);
+    return;
+  }
+
+  try {
+    // =========================
+    // 💳 ONE-TIME PAYMENT
+    // =========================
+    if (event.type === "payment_intent.succeeded") {
+      const pi = event.data.object as Stripe.PaymentIntent;
+
+      const campaignId = pi.metadata.campaignId;
+      const tipAmount = Number(pi.metadata.tipAmount || 0);
+      const total = (pi.amount_received ?? pi.amount) / 100;
+      const donationNet = total - tipAmount;
+
+      await Campaign.findByIdAndUpdate(campaignId, {
+        $pull: { pendingPayments: { orderId: pi.id } },
+        $push: {
+          donations: {
+            amount: total,
+            ngoAmount: donationNet,
+            tipAmount,
+            donorName: pi.metadata.donorName || "Anonymous",
+            donorEmail: pi.metadata.donorEmail || "Anonymous",
+            paymentMethod: pi.metadata.paymentMethod || "card",
+            frequency: "once",
+            receivedBy:
+              pi.metadata.fundsDestination === "connected_account"
+                ? "ngo"
+                : "admin",
+            timestamp: new Date(),
+          },
+        },
+        $inc: { totalRaised: donationNet },
+      });
+    }
+
+    // =========================
+    // 🔁 MONTHLY / YEARLY
+    // =========================
+
+    if (event.type === "invoice.payment_succeeded") {
+      const invoice = event.data.object as Stripe.Invoice;
+      //@ts-ignore
+      const pi = invoice.payment_intent as Stripe.PaymentIntent;
+
+      if (!pi){
+        res.json({ received: true });
+        return
+      } 
+
+      const campaignId = pi.metadata.campaignId;
+      const tipAmount = Number(pi.metadata.tipAmount || 0);
+      const total = invoice.amount_paid / 100;
+      const donationNet = total - tipAmount;
+
+      await Campaign.findByIdAndUpdate(campaignId, {
+        $push: {
+          recurringPayments: {
+            amount: total,
+            ngoAmount: donationNet,
+            tipAmount,
+            frequency: pi.metadata.frequency,
+            timestamp: new Date(),
+          },
+        },
+        $inc: { totalRaised: donationNet },
+      });
+    }
+
+    res.json({ received: true });
+  } catch (err) {
+    console.error("❌ Webhook handling error", err);
+    res.status(500).send("Webhook error");
+  }
+};
+
+router.post("/stripe-webhook", stripeWebhook);
+
 const confirmPayment = async (req: Request, res: Response): Promise<void> => {
-  const { paymentIntentId, type } = req.body;
+  const { paymentIntentId } = req.body;
 
   if (!paymentIntentId) {
     res.status(400).json({ error: "Missing paymentIntentId" });
@@ -799,72 +977,28 @@ const confirmPayment = async (req: Request, res: Response): Promise<void> => {
   }
 
   try {
-    let payment: any;
-
-    if (type === "one-time" || type === "once") {
-      payment = await stripe.paymentIntents.retrieve(paymentIntentId);
-    } else if (type === "monthly") {
-      // paymentIntentId actually comes from subscription.latest_invoice.payment_intent
-      const pi = await stripe.paymentIntents.retrieve(paymentIntentId);
-      payment = pi;
-    } else {
-      res.status(400).json({ error: "Invalid type" });
-      return;
-    }
-
-    if (payment.status === "succeeded") {
-      const campaignId = payment.metadata.campaignId;
-      const tipAmount = parseFloat(payment.metadata.tipAmount || "0");
-      // Prefer amount_received for succeeded intents; fallback to amount
-      const totalCharged = ((payment.amount_received ?? payment.amount) ?? 0) / 100;
-      const donationNet = Number((totalCharged - tipAmount).toFixed(2)); // raised without tip
-
-      const fundsDestination = payment.metadata.fundsDestination || "connected_account"; // or "platform"
-      const receivedBy = fundsDestination === "platform" ? "admin" : "ngo";
-
-      const donation = {
-        amount: totalCharged,                // gross charged (donation + tip if any)
-        ngoAmount: donationNet,              // donation without tip (what we count as raised)
-        tipAmount: tipAmount,
-        donorName: payment.metadata.donorName || "Anonymous",
-        donorEmail: payment.metadata.donorEmail || "Anonymous",
-        paymentMethod: payment.metadata.paymentMethod || "card", // "card" | "bank"
-        frequency: payment.metadata.frequency || "once",
-        receivedBy,
-        timestamp: new Date(),
-      };
-
-      if (type === "one-time") {
-        await Campaign.findByIdAndUpdate(campaignId, {
-          $pull: { pendingPayments: { orderId: paymentIntentId } },
-          $push: { donations: donation },
-          $inc: { totalRaised: donationNet },
-        });
-      } else {
-        await Campaign.findByIdAndUpdate(campaignId, {
-          $push: { recurringPayments: donation },
-          $inc: { totalRaised: donationNet },
-        });
-      }
-
-      res.status(200).json({ success: true, donation });
-      return;
-    }
+    const payment = await stripe.paymentIntents.retrieve(paymentIntentId);
 
     res.status(200).json({
-      success: false,
+      success: payment.status === "succeeded",
       status: payment.status,
-      message: "Payment not completed yet",
+      amount: payment.amount / 100,
+      currency: payment.currency,
+      frequency: payment.metadata.frequency || "once",
+      message:
+        payment.status === "succeeded"
+          ? "Payment confirmed"
+          : "Payment not completed yet",
     });
   } catch (err) {
-    console.error("❌ Error confirming payment:", err);
+    console.error("❌ confirmPayment error:", err);
     res.status(500).json({ error: "Failed to confirm payment" });
   }
 };
 
 router.post("/confirm-payment", confirmPayment);
 
-// PAYPAL
+
 const getPaypalAccessToken = async (): Promise<string> => {
   const base = process.env.PAYPAL_MODE === "live"
     ? "https://api-m.paypal.com"

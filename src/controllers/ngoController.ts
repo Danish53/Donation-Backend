@@ -2515,10 +2515,7 @@ export const ngoController = {
 
     // Always return generic success to avoid email enumeration
     if (!account) {
-       res.json({
-        success: true,
-        message: "If an account exists, an OTP has been sent to email.",
-      });
+      res.status(400).json({ success: false, error: "Email is not exists!" });
       return
     }
 
@@ -2558,11 +2555,11 @@ export const ngoController = {
     ? (account.doc as any).name || (account.doc as any).organizationName || (account.doc as any).email
     : (`${(account.doc as any).firstName ?? ""} ${(account.doc as any).lastName ?? ""}`.trim() || (account.doc as any).email);
 
-    // await emailService.sendPasswordResetOtpEmail(email, otp, displayName);
+    await emailService.sendPasswordResetOtpEmail(email, otp, displayName);
 
      res.json({
       success: true,
-      message: "If an account exists, an OTP has been sent to email.",
+      message: "OTP has been sent to email.",
     });
     return
   } catch (err) {
