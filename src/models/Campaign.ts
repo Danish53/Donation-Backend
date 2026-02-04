@@ -383,6 +383,7 @@ export interface ICampaign extends Document {
   status: "draft" | "ongoing" | "paused" | "completed";
 
   color?: string;
+  stripeComplete: boolean;
   fundraiserOptions?: IFundraiserOptions;
   commonDonation?: string;
   suggestedAmounts?: ISuggestedAmountItem[];
@@ -564,6 +565,11 @@ const campaignSchema = new Schema<ICampaign>(
       type: String,
       enum: ["draft", "ongoing", "paused", "completed"],
       default: "draft",
+    },
+
+    stripeComplete: {
+    type: Boolean,
+    default: false,
     },
 
     color: { type: String },

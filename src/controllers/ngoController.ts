@@ -1891,7 +1891,7 @@ export const ngoController = {
           },
         });
 
-        console.log(account, "new stripe account created...");
+        // console.log(account, "new stripe account created...");
 
         stripeAccountId = account.id;
         ngo.stripeAccountId = account.id;
@@ -1981,12 +1981,18 @@ export const ngoController = {
       const payoutsEnabled = account.payouts_enabled;
       const detailsSubmitted = (account as any).details_submitted ?? false;
 
-      // Aap ka purana logic roughly yehi tha:
       const NGOAccountReady =
         chargesEnabled && payoutsEnabled && missing.length === 0;
 
       ngo.NGOAccountReady = NGOAccountReady;
       await ngo.save();
+
+      if (NGOAccountReady) {
+      await Campaign.updateMany(
+        { ngo: ngoId },
+        { $set: { stripeComplete: true } }
+      );
+    }
 
       res.status(200).json({
         success: true,
