@@ -127,12 +127,10 @@ export const userController = {
     }
 
     // 3️⃣ Generate random password
-    const generatedPassword = crypto
-      .randomBytes(6)
-      .toString("base64")
-      .replace(/[^a-zA-Z0-9]/g, "")
-      .slice(0, 10);
-      console.log(generatedPassword)
+    const generatedPassword = Math.floor(
+    10000000 + Math.random() * 90000000
+    ).toString();
+
 
     // 4️⃣ Create new user
     const newUser = new User({

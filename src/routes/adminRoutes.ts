@@ -34,5 +34,9 @@ router.delete("/cause-types/:causeId", adminController.deleteCauseType);
 
 router.post("/status-active", adminController.updateNgoStatus);
 
+router.get("/all-payoutrequests", adminController.getAllPayoutRequests);
+router.post("/payout-approved/:id", adminController.approvePayout);
+router.post("/payout-reject/:id", adminController.rejectPayout);
+
 
 export default router;

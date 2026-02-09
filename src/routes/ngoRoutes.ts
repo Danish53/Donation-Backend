@@ -86,7 +86,8 @@ router.get("/cause-types-all", ngoController.getCauseTypesAll);
 router.get("/stripe/balance", auth, ngoController.getNgoBalanceStripe);
 router.get("/stripe/transactions", auth, ngoController.getNgoTransactionsStripe);
 router.get("/stripe/payouts", auth, ngoController.getNgoPayoutsStripe);
-router.post("/stripe/payout", auth, ngoController.createNgoPayoutStripe);
+router.post("/stripe/payout-request", auth, ngoController.createPayoutRequest);
+// router.post("/stripe/payout", auth, ngoController.createNgoPayoutStripe);
 
 // deactivate account
 router.post("/deactivate", auth, ngoController.deactivateNgo);

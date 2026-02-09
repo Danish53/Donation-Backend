@@ -5,8 +5,14 @@ import { Admin } from "../models/Admin";
 import OrganizationType from "../models/OrganizationType";
 import CauseType from "../models/CauseType";
 import { Ngo } from "../models/Ngo";
+import PayoutRequest from "../models/PayoutRequest";
+import Stripe from "stripe";
 
 dotenv.config();
+
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || "", {
+  apiVersion: "2025-03-31.basil" as any,
+});
 
 const JWT_SECRET = process.env.JWT_SECRET || "your-secret-key";
 
@@ -288,6 +294,102 @@ export const adminController = {
       error,
     });
   }
+},
+
+getAllPayoutRequests: async (req: Request, res: Response): Promise<void> => {
+  const list = await PayoutRequest
+    .find()
+    .populate("ngoId", "name email")
+    .sort({ createdAt: -1 });
+
+  res.json(list);
+},
+
+approvePayout: async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+
+    const request = await PayoutRequest.findById(id).populate("ngoId");
+
+    if (!request || request.status !== "pending") {
+       res.status(400).json({ message: "Invalid request" });
+       return
+    }
+
+    const ngo = request.ngoId as any;
+
+    if (!ngo.stripeAccountId) {
+  res.status(400).json({ message: "NGO stripe account missing" });
+  return;
+}
+
+if (!request.currency) {
+  res.status(400).json({ message: "Currency missing" });
+  return;
+}
+
+if (!request.amount) {
+  res.status(400).json({ message: "amount missing" });
+  return;
+}
+
+
+    // check balance available
+    const balance = await stripe.balance.retrieve({
+      stripeAccount: ngo.stripeAccountId,
+    });
+
+    const available =
+      balance.available.find(
+        b => b.currency === request.currency
+      )?.amount || 0;
+
+    const amountCents = Math.round(request?.amount * 100);
+
+    if (amountCents > available) {
+       res.status(400).json({
+        message: "Insufficient available balance",
+      });
+      return
+    }
+
+    // ✅ Stripe payout
+    const payout = await stripe.payouts.create(
+      {
+        amount: amountCents,
+        currency: request.currency,
+      },
+      {
+        stripeAccount: ngo.stripeAccountId,
+      }
+    );
+
+    request.status = "paid";
+    request.stripePayoutId = payout.id;
+    await request.save();
+
+    res.json({ success: true, payout });
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Approve failed" });
+  }
+},
+
+rejectPayout: async (req: Request, res: Response): Promise<void> => {
+  const { id } = req.params;
+
+  const request = await PayoutRequest.findById(id);
+
+  if (!request) {
+     res.status(404).json({ message: "Not found" });
+     return
+  }
+
+  request.status = "rejected";
+  await request.save();
+
+  res.json({ success: true, message: "Rejected" });
 },
 
 
