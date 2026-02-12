@@ -17,6 +17,7 @@ import CauseType from "../models/CauseType";
 import { User } from "../models/User";
 import { PasswordReset } from "../models/PasswordReset";
 import PayoutRequest from "../models/PayoutRequest";
+import { directNgoPayout } from "../utils/directNgoPayout";
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || "", {
   apiVersion: "2025-03-31.basil" as any,
@@ -3295,39 +3296,59 @@ const formattedCharges = charges.data.map((c) => ({
       method: p.method,
     }));
 
-    res.status(200).json({ success: true, payouts: formattedPayouts });
+    // ✅ Admin payouts from PayoutRequest collection
+    const adminPayouts = await PayoutRequest.find({
+      ngoId,
+      // status: "paid",
+      payoutMode: "admin"
+    });
+
+    const formattedAdmin = adminPayouts.map((p) => ({
+      id: p._id,
+      amount: p.amount,
+      currency: p.currency,
+      status: p.status,
+      arrivalDate: p.updatedAt, // ya agar koi manual arrival date store ho
+      method: "bank",
+      source: "admin",
+    }));
+
+    // ✅ Merge both lists
+    const allPayouts = [...formattedPayouts, ...formattedAdmin];
+
+    res.status(200).json({ success: true, payouts: allPayouts });
   } catch (err: any) {
     console.error("getNgoPayouts error:", err);
     res.status(500).json({ success: false, message: "Failed to fetch payouts" });
   }
   },
 
-  createPayoutRequest: async (req: Request, res: Response): Promise<void> => {
-  try {
-    const ngoId = req.user?.id;
-    const { amount, currency } = req.body;
+  // createPayoutRequest: async (req: Request, res: Response): Promise<void> => {
+  // try {
+  //   const ngoId = req.user?.id;
+  //   const { amount, currency } = req.body;
 
-    if (!amount || amount <= 0) {
-       res.status(400).json({ message: "Invalid amount" });
-       return
-    }
+  //   if (!amount || amount <= 0) {
+  //      res.status(400).json({ message: "Invalid amount" });
+  //      return
+  //   }
 
-    const request = await PayoutRequest.create({
-      ngoId,
-      amount,
-      currency: currency || "usd",
-    });
+  //   const request = await PayoutRequest.create({
+  //     ngoId,
+  //     amount,
+  //     currency: currency || "usd",
+  //   });
 
-    res.json({
-      success: true,
-      message: "Payout request submitted for admin approval",
-      request,
-    });
+  //   res.json({
+  //     success: true,
+  //     message: "Payout request submitted for admin approval",
+  //     request,
+  //   });
 
-  } catch (err) {
-    res.status(500).json({ message: "Server error" });
-  }
-  },
+  // } catch (err) {
+  //   res.status(500).json({ message: "Server error" });
+  // }
+  // },
 
   // createNgoPayoutStripe: async (
   // req: Request,
@@ -3407,6 +3428,105 @@ const formattedCharges = charges.data.map((c) => ({
 
   // ngo account deactivate
   
+  // controllers/ngoPayoutController.ts
+
+  getNgoBalance: async (req: Request, res: Response): Promise<void> => {
+    try {
+    const ngoId = req?.user?.id;
+
+    const campaigns = await Campaign.find({ ngoId });
+
+    let ngoReceived = 0;
+    let adminHeld = 0;
+
+    campaigns.forEach(c => {
+      c.pendingPayments.forEach(d => {
+        if (d.receivedBy === "ngo") {
+          ngoReceived += d.amount;
+        }
+
+        if (d.receivedBy === "admin") {
+          adminHeld += d.amount;
+        }
+      });
+    });
+
+    campaigns.forEach(c => {
+      c.recurringPayments.forEach(d => {
+        if (d.receivedBy === "ngo") {
+          ngoReceived += d.amount;
+        }
+
+        if (d.receivedBy === "admin") {
+          adminHeld += d.amount;
+        }
+      });
+    });
+
+    // minus already paid payouts
+    const paidRequests = await PayoutRequest.find({
+      ngoId,
+      status: "paid"
+    });
+
+    const alreadyPaid = paidRequests.reduce(
+      (s, p) => s + (p.amount ?? 0),
+      0
+    );
+
+    res.json({
+      ngoDirectReceived: ngoReceived,
+      adminHeldTotal: adminHeld,
+      alreadyPaidByAdmin: alreadyPaid,
+      adminPendingBalance: adminHeld - alreadyPaid
+    });
+
+    } catch (err) {
+    res.status(500).json({ message: "Balance error" });
+    }
+  },
+
+  createPayoutRequest: async (req: Request, res: Response): Promise<void> => {
+    try {
+    const ngoId = req?.user?.id;
+    const { amount, currency, payoutMode } = req.body;
+
+    if (!amount || amount <= 0){
+       res.status(400).json({ message: "Invalid amount" });
+       return;
+    }
+
+    const ngo = await Ngo.findById(ngoId);
+
+    if (!ngo?.stripeAccountId){
+     res.status(400).json({ message: "Stripe not connected" });
+      return;
+    }
+
+    const request = await PayoutRequest.create({
+      ngoId,
+      amount,
+      currency: currency || "usd",
+      payoutMode,
+      status: payoutMode === "direct" ? "processing" : "pending",
+    });
+
+    // ✅ DIRECT MODE → instant payout
+    if (payoutMode === "direct") {
+      await directNgoPayout(request._id);
+    }
+
+    res.json({
+      success: true,
+      request,
+    });
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: err instanceof Error ? err.message : "Server error" });
+  }
+  },
+
   deactivateNgo: async (req: Request, res: Response): Promise<void> => {
   try {
     const ngoId = req.user?.id;

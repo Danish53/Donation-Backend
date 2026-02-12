@@ -298,83 +298,34 @@ export const adminController = {
 
 getAllPayoutRequests: async (req: Request, res: Response): Promise<void> => {
   const list = await PayoutRequest
-    .find()
+    .find({ payoutMode: "admin" })
     .populate("ngoId", "name email")
     .sort({ createdAt: -1 });
 
   res.json(list);
 },
 
-approvePayout: async (req: Request, res: Response): Promise<void> => {
-  try {
-    const { id } = req.params;
+approvePayout: async (req: Request, res: Response): Promise<void>=>{
+  const { id } = req.params;
 
-    const request = await PayoutRequest.findById(id).populate("ngoId");
+  const request = await PayoutRequest.findById(id);
 
-    if (!request || request.status !== "pending") {
-       res.status(400).json({ message: "Invalid request" });
-       return
-    }
-
-    const ngo = request.ngoId as any;
-
-    if (!ngo.stripeAccountId) {
-  res.status(400).json({ message: "NGO stripe account missing" });
-  return;
-}
-
-if (!request.currency) {
-  res.status(400).json({ message: "Currency missing" });
-  return;
-}
-
-if (!request.amount) {
-  res.status(400).json({ message: "amount missing" });
-  return;
-}
-
-
-    // check balance available
-    const balance = await stripe.balance.retrieve({
-      stripeAccount: ngo.stripeAccountId,
-    });
-
-    const available =
-      balance.available.find(
-        b => b.currency === request.currency
-      )?.amount || 0;
-
-    const amountCents = Math.round(request?.amount * 100);
-
-    if (amountCents > available) {
-       res.status(400).json({
-        message: "Insufficient available balance",
-      });
-      return
-    }
-
-    // ✅ Stripe payout
-    const payout = await stripe.payouts.create(
-      {
-        amount: amountCents,
-        currency: request.currency,
-      },
-      {
-        stripeAccount: ngo.stripeAccountId,
-      }
-    );
-
-    request.status = "paid";
-    request.stripePayoutId = payout.id;
-    await request.save();
-
-    res.json({ success: true, payout });
-
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: "Approve failed" });
+  if (!request){
+      res.status(400).json({ message:"Invalid payout request" });
+      return;
   }
+
+  request.status = "paid";
+  request.adminApprovedAt = new Date();
+
+  await request.save();
+
+  res.json({
+    success: true,
+    message: "Mark as paid after manual transfer"
+  });
 },
+
 
 rejectPayout: async (req: Request, res: Response): Promise<void> => {
   const { id } = req.params;

@@ -397,6 +397,30 @@ class EmailService {
     await this.sendEmail(options);
   }
 
+  // 8. donor email
+  async sendEmailToDonor(
+  donorEmail: string,
+  donorName: string,
+  subject: string,
+  body: string
+): Promise<void> {
+  const content = `
+    <div class="content">
+      <h2>Hello ${donorName},</h2>
+      ${body}
+    </div>
+  `;
+
+  const options: EmailOptions = {
+    to: donorEmail,
+    subject: subject,
+    html: wrapEmailContent(content),
+  };
+
+  await this.sendEmail(options);
+}
+
+
 }
 
 

@@ -969,7 +969,7 @@ const stripeWebhook = async (req: Request, res: Response): Promise<void> => {
 router.post("/stripe-webhook", stripeWebhook);
 
 const confirmPayment = async (req: Request, res: Response): Promise<void> => {
-  const { paymentIntentId } = req.body;
+  const { paymentIntentId, donorEmail, donorName } = req.body;
 
   if (!paymentIntentId) {
     res.status(400).json({ error: "Missing paymentIntentId" });
@@ -978,6 +978,34 @@ const confirmPayment = async (req: Request, res: Response): Promise<void> => {
 
   try {
     const payment = await stripe.paymentIntents.retrieve(paymentIntentId);
+
+    if (payment.status === "succeeded") {
+      // Campaign fetch karo
+      const campaign = await Campaign.findById(payment.metadata.campaignId);
+      // console.log("Campaign for thank you email:", campaign);
+      if (campaign?.thankYouEmail) {
+  // console.log("Preparing to send donor email...");
+  // console.log("Donor Email:", donorEmail);
+  // console.log("Donor Name:", donorName);
+  // console.log("Email Subject:", campaign.thankYouEmail.subject);
+  // console.log("Email Body:", campaign.thankYouEmail.body);
+
+  try {
+    await emailService.sendEmailToDonor(
+      donorEmail,
+      donorName,
+      campaign?.thankYouEmail?.subject || "Thank You for Your Donation",
+      campaign?.thankYouEmail?.body || ""
+    );
+    // console.log("✅ Donor email sent successfully");
+  } catch (err) {
+    console.error("❌ Failed to send donor email:", err);
+  }
+} else {
+  console.log("Campaign thankYouEmail not found, skipping email.");
+}
+
+    }
 
     res.status(200).json({
       success: payment.status === "succeeded",

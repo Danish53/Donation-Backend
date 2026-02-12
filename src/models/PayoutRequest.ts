@@ -9,14 +9,34 @@ const payoutRequestSchema = new mongoose.Schema(
       ref: "Ngo",
       required: true,
     },
+
     amount: Number,
-    currency: String,
+    currency: {
+      type: String,
+      default: "usd",
+    },
+
+    // ✅ NEW
+    payoutMode: {
+      type: String,
+      enum: ["direct", "admin"], // NGO direct OR admin approval
+      default: "admin",
+    },
 
     status: {
       type: String,
-      enum: ["pending", "approved", "rejected", "paid"],
+      enum: [
+        "pending",     // waiting admin
+        "processing",  // direct payout running
+        "approved",    // admin approved
+        "rejected",
+        "paid",
+        "failed",
+      ],
       default: "pending",
     },
+
+    adminApprovedAt: Date,
 
     stripePayoutId: String,
 
@@ -26,6 +46,10 @@ const payoutRequestSchema = new mongoose.Schema(
     },
 
     note: String,
+
+    // ✅ NEW
+    adminNote: String,
+
   },
   { timestamps: true }
 );

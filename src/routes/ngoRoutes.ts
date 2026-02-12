@@ -89,6 +89,8 @@ router.get("/stripe/payouts", auth, ngoController.getNgoPayoutsStripe);
 router.post("/stripe/payout-request", auth, ngoController.createPayoutRequest);
 // router.post("/stripe/payout", auth, ngoController.createNgoPayoutStripe);
 
+router.get("/ngo-balance-payout", auth, ngoController.getNgoBalance);
+
 // deactivate account
 router.post("/deactivate", auth, ngoController.deactivateNgo);
 
